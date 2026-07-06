@@ -62,4 +62,11 @@ describe("triageSpec", () => {
     expect(t.class).toBe("locator-drift");
     expect(t.recommendation).toMatch(/repair/i);
   });
+
+  it("does not blame the test when the environment couldn't run", async () => {
+    const bad: TestRunResult = { ...run(false, "Timed out waiting 20000ms from config.webServer"), inconclusive: true };
+    const t = await triageSpec("x.spec.ts", 2, runner([bad, bad]));
+    expect(t.evidence).toMatch(/environment problem|not a test failure/i);
+    expect(t.recommendation).toMatch(/not the test's fault/i);
+  });
 });

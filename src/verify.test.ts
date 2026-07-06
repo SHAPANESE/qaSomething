@@ -4,6 +4,7 @@ import {
   checkMutationPolarity,
   decideVerdict,
   interpretRun,
+  looksInconclusive,
   pairSpecs,
   verdictToJson,
   verifySpec,
@@ -40,6 +41,19 @@ describe("interpretRun", () => {
   });
 });
 
+describe("looksInconclusive", () => {
+  it("flags environment/tooling failures, not test failures", () => {
+    expect(looksInconclusive("Error: No tests found", 1)).toBe(true);
+    expect(looksInconclusive("Executable doesn't exist at ...\nplaywright install", 1)).toBe(true);
+    expect(looksInconclusive("Timed out waiting 20000ms from config.webServer", 1)).toBe(true);
+    expect(looksInconclusive("listen EADDRINUSE: address already in use", 1)).toBe(true);
+    expect(looksInconclusive("anything", 127)).toBe(true);
+  });
+  it("does not flag a genuine assertion failure", () => {
+    expect(looksInconclusive("Expected: a\nReceived: b\n1 failed", 1)).toBe(false);
+  });
+});
+
 describe("aggregateStability", () => {
   it("is stable-pass when every run passes", () => {
     expect(aggregateStability([run(true), run(true), run(true)])).toEqual({ kind: "stable-pass" });
@@ -53,6 +67,18 @@ describe("aggregateStability", () => {
       passes: 2,
       runs: 3,
     });
+  });
+  it("is inconclusive when any run couldn't execute", () => {
+    const bad: TestRunResult = { ...run(false), inconclusive: true };
+    expect(aggregateStability([bad, run(false)])).toEqual({ kind: "inconclusive" });
+  });
+});
+
+describe("decideVerdict — inconclusive", () => {
+  it("is not trusted and explains it's an environment problem", () => {
+    const v = decideVerdict("x.spec.ts", { kind: "inconclusive" }, { kind: "baseline-broken" });
+    expect(v.trusted).toBe(false);
+    expect(v.reasons.join(" ")).toMatch(/environment problem|not a test failure/i);
   });
 });
 

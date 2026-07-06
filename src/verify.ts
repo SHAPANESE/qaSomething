@@ -19,6 +19,26 @@ export interface TestRunResult {
   passedCount: number;
   failedCount: number;
   output: string;
+  /** True when the run couldn't execute (app/Playwright not runnable) — NOT a test failure. */
+  inconclusive?: boolean;
+}
+
+const INCONCLUSIVE_SIGNALS: RegExp[] = [
+  /no tests found/i,
+  /Executable doesn't exist/i,
+  /playwright install/i,
+  /Timed out waiting \d+ms from config\.webServer/i,
+  /web ?server.*exited early/i,
+  /process from config\.webServer/i,
+  /EADDRINUSE/i,
+  /command not found/i,
+  /Cannot find module/i,
+];
+
+/** Pure: does this output/exit look like an environment failure, not a test failure? */
+export function looksInconclusive(output: string, exitCode: number | null): boolean {
+  if (exitCode === 127) return true;
+  return INCONCLUSIVE_SIGNALS.some((re) => re.test(output));
 }
 
 /** Signature so the runner can be faked in tests and swapped for CI. */
@@ -32,22 +52,28 @@ export function interpretRun(exitCode: number | null, output: string): TestRunRe
   const failedMatch = output.match(COUNT_RE("failed"));
   const passedCount = passedMatch ? Number.parseInt(passedMatch[1] ?? "0", 10) : 0;
   const failedCount = failedMatch ? Number.parseInt(failedMatch[1] ?? "0", 10) : 0;
+  const inconclusive = looksInconclusive(output, exitCode);
   return {
-    passed: exitCode === 0 && failedCount === 0,
+    passed: exitCode === 0 && failedCount === 0 && !inconclusive,
     exitCode,
     passedCount,
     failedCount,
     output,
+    ...(inconclusive ? { inconclusive: true } : {}),
   };
 }
 
 export type Stability =
   | { kind: "stable-pass" }
   | { kind: "failing" }
-  | { kind: "flaky"; passes: number; runs: number };
+  | { kind: "flaky"; passes: number; runs: number }
+  | { kind: "inconclusive" };
 
 /** Pure: aggregate N quarantine runs into a stability verdict. */
 export function aggregateStability(runs: TestRunResult[]): Stability {
+  // An environment failure isn't a test failure — surface it distinctly so the
+  // gate doesn't blame the test (and the user) for a broken setup.
+  if (runs.some((r) => r.inconclusive === true)) return { kind: "inconclusive" };
   const passes = runs.filter((r) => r.passed).length;
   if (passes === runs.length) return { kind: "stable-pass" };
   if (passes === 0) return { kind: "failing" };
@@ -85,6 +111,8 @@ export function decideVerdict(
   mutation: MutationVerdict,
 ): TestVerdict {
   const reasons: string[] = [];
+  if (stability.kind === "inconclusive")
+    reasons.push("Could not run — the app or Playwright is not runnable (an environment problem, NOT a test failure). Fix the setup, then re-verify.");
   if (stability.kind === "failing") reasons.push("Test fails on a clean run.");
   if (stability.kind === "flaky") reasons.push(`Flaky: passed ${stability.passes}/${stability.runs} runs.`);
   if (mutation.kind === "not-meaningful")

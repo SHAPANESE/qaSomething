@@ -74,6 +74,14 @@ export async function triageSpec(specFile: string, reruns: number, runner: TestR
     return { spec, class: "flaky", evidence: `Passed ${passes}/${runs.length} runs.`, recommendation: RECOMMENDATION.flaky };
   }
   const failing = runs.find((r) => !r.passed) as TestRunResult;
+  if (failing.inconclusive === true) {
+    return {
+      spec,
+      class: "unknown",
+      evidence: "Could not run — the app or Playwright is not runnable (environment problem, not a test failure).",
+      recommendation: "Fix the setup (start command, port, browser install), then re-run — this is not the test's fault.",
+    };
+  }
   const { class: cls, evidence } = classifyFailure(failing.output);
   return { spec, class: cls, evidence, recommendation: RECOMMENDATION[cls] };
 }
