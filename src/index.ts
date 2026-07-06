@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveConfig, type RunConfig } from "./config.js";
@@ -9,10 +9,15 @@ import { createAnthropicModel } from "./model.js";
 import { fileTicketProvider, formatOracle } from "./oracle.js";
 import type { Step } from "./types.js";
 import { playwrightRunner, verifyAll, type TestVerdict } from "./verify.js";
-import { listChangedPaths } from "./workspace.js";
+import { isGitRepo, listChangedPaths } from "./workspace.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CRITERIA = path.resolve(HERE, "..", "docs", "qa-senior-criteria.md");
+
+function inAllowed(relPath: string, dirs: string[]): boolean {
+  const p = relPath.split(path.sep).join("/");
+  return dirs.some((d) => p === d || p.startsWith(d.replace(/\/$/, "") + "/"));
+}
 
 function renderStep(step: Step): void {
   const { action } = step;
@@ -35,32 +40,63 @@ function renderStep(step: Step): void {
   }
 }
 
-async function main(): Promise<void> {
-  const program = new Command();
-  program
-    .name("qa-agent")
-    .description("A senior-QA-minded agent that generates trustworthy Playwright tests.")
-    .argument("<mission>", 'What to test, e.g. "Test the login flow"')
-    .requiredOption("-r, --repo <path>", "Path to the repo under test")
-    .option("-t, --ticket <ref>", "Ticket file that defines expected behavior (the oracle)")
-    .option("-c, --criteria <path>", "Path to the senior-QA criteria manual", DEFAULT_CRITERIA)
-    .option("-m, --model <id>", "Anthropic model id")
-    .option("--max-steps <n>", "Max loop iterations", (v) => Number.parseInt(v, 10))
-    .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
-    .option("--skip-verify", "Skip the post-run trust gates (quarantine + mutation)")
-    .parse();
+/** Find spec files to verify: git-changed ones by default, or all under the write dirs. */
+async function discoverSpecs(config: RunConfig, all: boolean): Promise<string[]> {
+  if (!all && (await isGitRepo(config.repoPath))) {
+    const changed = await listChangedPaths(config.repoPath);
+    return changed
+      .filter((p) => p.endsWith(".spec.ts") && inAllowed(p, config.allowedWriteDirs))
+      .map((p) => path.join(config.repoPath, p));
+  }
+  const found: string[] = [];
+  for (const dir of config.allowedWriteDirs) {
+    const abs = path.join(config.repoPath, dir);
+    try {
+      for (const entry of await readdir(abs, { recursive: true })) {
+        const name = String(entry);
+        if (name.endsWith(".spec.ts")) found.push(path.join(abs, name));
+      }
+    } catch {
+      /* directory may not exist */
+    }
+  }
+  return found;
+}
 
-  const mission = program.args[0] as string;
-  const opts = program.opts<{
-    repo: string;
-    ticket?: string;
-    criteria: string;
-    model?: string;
-    maxSteps?: number;
-    timeout?: number;
-    skipVerify?: boolean;
-  }>();
+async function runGates(config: RunConfig, specFiles: string[]): Promise<boolean> {
+  if (specFiles.length === 0) {
+    console.log("No test files to verify.");
+    return true;
+  }
+  console.log(`\n${"─".repeat(60)}\nVerifying ${specFiles.length} spec file(s) — quarantine ×${config.reruns} + mutation…`);
+  const runner = playwrightRunner(config.repoPath, config.commandTimeoutMs);
+  let verdicts: TestVerdict[];
+  try {
+    verdicts = await verifyAll(specFiles, config.reruns, runner);
+  } catch (err) {
+    console.warn(`⚠ Verification could not run (is the app + Playwright runnable?): ${String(err)}`);
+    return true;
+  }
+  let anyUntrusted = false;
+  for (const v of verdicts) {
+    console.log(`\n${v.trusted ? "✔ TRUSTED " : "✗ REJECTED"}  ${path.basename(v.spec)}`);
+    for (const reason of v.reasons) console.log(`   · ${reason}`);
+    if (!v.trusted) anyUntrusted = true;
+  }
+  return !anyUntrusted;
+}
 
+interface RunOpts {
+  repo: string;
+  ticket?: string;
+  criteria: string;
+  model?: string;
+  maxSteps?: number;
+  timeout?: number;
+  skipVerify?: boolean;
+}
+
+async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
   if (!process.env["ANTHROPIC_API_KEY"]) {
     console.error("Error: ANTHROPIC_API_KEY is not set. Export it before running.");
     process.exitCode = 1;
@@ -68,13 +104,11 @@ async function main(): Promise<void> {
   }
 
   const criteriaManual = await readFile(opts.criteria, "utf8");
-
   const overrides: Partial<RunConfig> = {};
   if (opts.model !== undefined) overrides.modelId = opts.model;
   if (opts.maxSteps !== undefined) overrides.maxSteps = opts.maxSteps;
   if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
   const config = resolveConfig(path.resolve(opts.repo), overrides);
-
   const model = createAnthropicModel(config.modelId);
 
   let oracle: string | undefined;
@@ -83,12 +117,10 @@ async function main(): Promise<void> {
     oracle = formatOracle(ticket);
     console.log(`oracle: ticket ${ticket.id} — ${ticket.title}`);
   } else {
-    console.warn("⚠ No --ticket given: the agent has no source of truth and may encode current behavior (bugs included) as expected.");
+    console.warn("⚠ No --ticket: the agent has no source of truth and may encode current behavior (bugs included) as expected.");
   }
 
-  console.log(`qa-agent · model=${config.modelId} · repo=${config.repoPath}`);
-  console.log(`mission: ${mission}`);
-
+  console.log(`qa-agent · model=${config.modelId} · repo=${config.repoPath}\nmission: ${mission}`);
   const result = await runAgent({
     model,
     mission,
@@ -99,53 +131,61 @@ async function main(): Promise<void> {
   });
 
   console.log("\n" + "─".repeat(60));
-  if (result.finished) {
-    console.log(`✔ Agent finished in ${result.stepCount} steps.\n`);
-    console.log(result.summary ?? "(no summary)");
-  } else {
+  if (!result.finished) {
     console.log(`✗ Stopped: ${result.stoppedReason}`);
     process.exitCode = 1;
     return;
   }
+  console.log(`✔ Agent finished in ${result.stepCount} steps.\n\n${result.summary ?? "(no summary)"}`);
 
   if (opts.skipVerify) return;
-  await verifyProducedTests(config);
+  const specs = await discoverSpecs(config, false);
+  const ok = await runGates(config, specs);
+  if (!ok) process.exitCode = 1;
 }
 
-/** Post-run trust gates: quarantine (re-run N times) + mutation polarity. */
-async function verifyProducedTests(config: RunConfig): Promise<void> {
-  const changed = await listChangedPaths(config.repoPath);
-  const specFiles = changed
-    .filter((p) => p.endsWith(".spec.ts"))
-    .filter((p) => config.allowedWriteDirs.some((d) => p === d || p.startsWith(d.replace(/\/$/, "") + "/")))
-    .map((p) => path.join(config.repoPath, p));
-
-  if (specFiles.length === 0) {
-    console.log("\nNo new test files to verify.");
-    return;
-  }
-
-  console.log(`\n${"─".repeat(60)}\nVerifying ${specFiles.length} test file(s) — quarantine ×${config.reruns} + mutation…`);
-  const runner = playwrightRunner(config.repoPath, config.commandTimeoutMs);
-  let verdicts: TestVerdict[];
-  try {
-    verdicts = await verifyAll(specFiles, config.reruns, runner);
-  } catch (err) {
-    console.warn(`⚠ Verification could not run (is the app + Playwright runnable?): ${String(err)}`);
-    return;
-  }
-
-  let anyUntrusted = false;
-  for (const v of verdicts) {
-    const label = v.trusted ? "✔ TRUSTED" : "✗ REJECTED";
-    console.log(`\n${label}  ${v.spec}`);
-    for (const reason of v.reasons) console.log(`   · ${reason}`);
-    if (!v.trusted) anyUntrusted = true;
-  }
-  if (anyUntrusted) process.exitCode = 1;
+interface VerifyOpts {
+  repo: string;
+  reruns?: number;
+  timeout?: number;
+  all?: boolean;
 }
 
-main().catch((err: unknown) => {
+async function verifyAction(opts: VerifyOpts): Promise<void> {
+  const overrides: Partial<RunConfig> = {};
+  if (opts.reruns !== undefined) overrides.reruns = opts.reruns;
+  if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
+  const config = resolveConfig(path.resolve(opts.repo), overrides);
+  const specs = await discoverSpecs(config, opts.all === true);
+  const ok = await runGates(config, specs);
+  if (!ok) process.exitCode = 1;
+}
+
+const program = new Command();
+program.name("qa-agent").description("A senior-QA-minded agent that generates trustworthy Playwright tests.");
+
+program
+  .command("run <mission>", { isDefault: true })
+  .description("Run the QA agent to generate tests, then verify them")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .option("-t, --ticket <ref>", "Ticket file that defines expected behavior (the oracle)")
+  .option("-c, --criteria <path>", "Path to the senior-QA criteria manual", DEFAULT_CRITERIA)
+  .option("-m, --model <id>", "Anthropic model id")
+  .option("--max-steps <n>", "Max loop iterations", (v) => Number.parseInt(v, 10))
+  .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
+  .option("--skip-verify", "Skip the post-run trust gates")
+  .action(runAgentAction);
+
+program
+  .command("verify")
+  .description("Verify existing tests with the trust gates (quarantine + mutation), no agent")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .option("--reruns <n>", "Quarantine re-runs per test", (v) => Number.parseInt(v, 10))
+  .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
+  .option("--all", "Verify all specs under the write dirs, not just git-changed ones")
+  .action(verifyAction);
+
+program.parseAsync().catch((err: unknown) => {
   console.error(err);
   process.exitCode = 1;
 });
