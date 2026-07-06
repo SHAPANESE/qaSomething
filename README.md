@@ -26,9 +26,20 @@ observing the app (which would freeze current bugs as "correct").
 The harness runs both and requires real→PASS, mutation→FAIL; a hollow test is
 rejected.
 
-**Not yet built:** the eval harness (needs a fixture app with a planted bug),
-element caching (Stagehand-style, cost), and Missions #2–#6. A live end-to-end run
-also still needs `ANTHROPIC_API_KEY` and a target app + Playwright installed.
+**Also built:**
+- **Eval harness** (`src/eval.ts`, `evals/*.eval.json`) — scores whether the trust
+  gates classify a labeled test set correctly. Fixture eval: 3/3.
+- **`verify` subcommand** — `qa-agent verify --repo <path> --all` runs the gates on
+  existing tests, no agent.
+- **Claude Code skill** (`.claude/skills/qa-agent/`) — run the whole flow inside
+  Claude Code, no API cost.
+- **Jira oracle** — `run --jira <KEY>` (needs `JIRA_BASE_URL`/`JIRA_EMAIL`/
+  `JIRA_API_TOKEN`); the skill uses the Atlassian MCP instead.
+- **Mission #2 — auto-repair** — `run --repair`: re-anchors drifted locators without
+  weakening assertions (demonstrated on the fixture).
+
+**Not yet built:** element caching (Stagehand-style, cost), Missions #3–#6. A live
+agent run still needs `ANTHROPIC_API_KEY`; the Claude Code skill needs neither.
 
 ## Install
 
