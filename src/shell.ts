@@ -14,7 +14,10 @@ export interface BlocklistRule {
  * layers that actually contain the agent. Screening just stops the worst.
  */
 export const DEFAULT_BLOCKLIST: BlocklistRule[] = [
-  { pattern: /\brm\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r|-r\s+-f|-f\s+-r)\b/i, reason: "Recursive force-delete (rm -rf) is forbidden." },
+  {
+    pattern: /\brm\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r|-r\s+-f|-f\s+-r)\b/i,
+    reason: "Recursive force-delete (rm -rf) is forbidden.",
+  },
   { pattern: /\b(mkfs|fdisk|parted)\b/i, reason: "Disk formatting/partitioning is forbidden." },
   { pattern: /\bdd\s+.*\bof=\/dev\//i, reason: "Raw disk write via dd is forbidden." },
   { pattern: /\b(shutdown|reboot|halt|poweroff)\b/i, reason: "Power/state commands are forbidden." },

@@ -10,7 +10,7 @@
 Two axes — don't conflate them:
 
 - **Lean in mechanisms/features:** no speculative subsystems added "just in case".
-- **Robust in correctness and safety:** the foundations that make a test *actually useful* and keep the agent from *breaking anything* ship on day 1 — cheap now, extremely expensive to retrofit.
+- **Robust in correctness and safety:** the foundations that make a test _actually useful_ and keep the agent from _breaking anything_ ship on day 1 — cheap now, extremely expensive to retrofit.
 
 > "Robust" = correctness and safety foundations baked in from the start. It does NOT mean gold-plating or guessing abstractions before we've seen the engine run.
 
@@ -23,23 +23,23 @@ Code generation got 3-5x faster with AI, but **verification did not scale**. QA 
 The QA bottleneck isn't one problem — it's six:
 
 1. **Writing tests** (slow, expensive E2E)
-2. **Maintaining / auto-repairing tests** (flaky, breaking selectors) — *the biggest differentiator*
+2. **Maintaining / auto-repairing tests** (flaky, breaking selectors) — _the biggest differentiator_
 3. **Regression** (re-running everything each release)
 4. **De-serializing the gate** (dev → waits for QA → long cycle)
 5. **Coverage / unknowns** (what is NOT tested)
 6. **Reproducing / triaging bugs** (vague report → hours)
 
-**Core insight:** the six are NOT six products. They are **six missions for the same engine.** Build *one* loop and *point* it:
+**Core insight:** the six are NOT six products. They are **six missions for the same engine.** Build _one_ loop and _point_ it:
 
-| Mission to the same agent | Solves |
-|---|---|
-| "Write a test for X" | #1 Generate |
-| "This test broke, fix it" | #2 Auto-repair |
-| "Explore and find what's untested" | #5 Coverage |
-| "This test failed, why?" | #6 Triage |
-| "Run everything and report" | #3 Regression |
+| Mission to the same agent          | Solves         |
+| ---------------------------------- | -------------- |
+| "Write a test for X"               | #1 Generate    |
+| "This test broke, fix it"          | #2 Auto-repair |
+| "Explore and find what's untested" | #5 Coverage    |
+| "This test failed, why?"           | #6 Triage      |
+| "Run everything and report"        | #3 Regression  |
 
-Same idea that lets mini-swe-agent solve any coding task with a single loop: change the *task*, not the engine.
+Same idea that lets mini-swe-agent solve any coding task with a single loop: change the _task_, not the engine.
 
 **Built staged, respecting dependencies** (you can't maintain/triage tests that don't exist yet). Order: **engine + Mission #1 first** (the foundation everything else attaches to) → #2 → #3/#5/#6 → #4 last (it's process/pipeline).
 
@@ -53,12 +53,12 @@ Build **the engine** + its first mission (**#1 Generate tests**) + the **robustn
 
 - The other 5 missions (added as new prompts pointed at the same engine).
 - The layered CI pipeline (Layer 1 deterministic / Layer 2 agentic / Layer 3 triage).
-- The detailed selector auto-repair strategy (#2) — designed *after* we've seen the engine run, not guessed now.
+- The detailed selector auto-repair strategy (#2) — designed _after_ we've seen the engine run, not guessed now.
 - History summarization/compaction for long runs (context rot) — added when the real problem shows up.
 - Context preloading (the agent fetches what it needs via shell; we only tweak the prompt if it turns out myopic).
 - Automatic ticket creation (Jira/GitHub Issues).
 
-> **Anti-guessing note:** some things that sound "robust" (auto-repair, CI pipeline, history compaction) are deferred on purpose — building them now is *guessing*, and a wrong robust abstraction is worse than none. Robustness yes; guessing early no.
+> **Anti-guessing note:** some things that sound "robust" (auto-repair, CI pipeline, history compaction) are deferred on purpose — building them now is _guessing_, and a wrong robust abstraction is worse than none. Robustness yes; guessing early no.
 
 ---
 
@@ -75,7 +75,7 @@ A single cycle, mini-swe-agent style:
 ```
 
 - **Action space:** a single action type — **one shell command.** No tool schemas, no function-calling. With shell the agent can already: read the repo (`cat`/`grep`/`ls`), start the app, run Playwright (`npx playwright test`), write `*.spec.ts`, and dump reports.
-- **Observation:** observation *is* the command output. If the agent wants to "see" the screen, its own Playwright script prints what it needs. No observation subsystem.
+- **Observation:** observation _is_ the command output. If the agent wants to "see" the screen, its own Playwright script prints what it needs. No observation subsystem.
 - **Context:** the agent manages it itself, fetching via shell. If it's myopic, the first fix is a line in the mission prompt, not code.
 
 ---
@@ -87,7 +87,8 @@ The core LLM vice: they write tests that **always pass** (navigate, check it loa
 1. **Proof the test catches bugs (mutation check).** IMPLEMENTED as a harness gate (`src/verify.ts`), not a matter of trust. For every real `X.spec.ts` the agent also writes a sibling `X.mutation.spec.ts`: same scenario and assertions, but the behavior is deliberately broken via Playwright network interception (`page.route`) — **no app-source edit**, so it respects the read-only guardrail. The harness runs both and checks **polarity**: real → PASS, mutation → FAIL. If the mutation still passes, the assertions are hollow and the test is **rejected**. This is the differentiator.
 
    **Oracle (resolved): expected behavior derives from a TICKET.** A `--ticket` reference (file now; Jira/GitHub provider later, `src/oracle.ts`) is injected as the source of truth. The agent tests against the ticket's acceptance criteria, NOT against the running app — which is what stops it from freezing current bugs as "correct". Without a ticket the CLI warns loudly.
-2. **Meaningful assertions, not smoke tests.** The prompt biases toward verifying *behavior / acceptance criteria*, not "the page rendered".
+
+2. **Meaningful assertions, not smoke tests.** The prompt biases toward verifying _behavior / acceptance criteria_, not "the page rendered".
 3. **Semantic locators only.** `getByRole`, `getByLabel`, `getByText`, `data-testid`. No xpath, `nth-child`, or volatile text. Playwright auto-wait; **zero arbitrary `sleep`s.** (This is exactly the debt #2 would have to clean up — don't generate it.)
 4. **Quarantine.** IMPLEMENTED (`src/verify.ts`): a freshly generated test isn't marked "trusted" until it runs N times (`config.reruns`, default 3) without flaking. Prevents polluting the suite.
 5. **Evidence, not the agent's word.** What counts is the test file + a real run result. The agent's summary proves nothing; it may hallucinate that it tested something.
@@ -107,15 +108,17 @@ The agent has shell → dangerous power. Guardrails from day 1:
 
 ## The senior-QA criteria layer (the brain)
 
-The mechanism (loop + guardrails) defines *how* the agent acts. This layer defines *what it decides to test and why* — it's what separates "an agent that writes a test" from someone with real craft. It is **content/knowledge, not mechanism** (fits the guiding principle: robust where it matters, no code complexity).
+The mechanism (loop + guardrails) defines _how_ the agent acts. This layer defines _what it decides to test and why_ — it's what separates "an agent that writes a test" from someone with real craft. It is **content/knowledge, not mechanism** (fits the guiding principle: robust where it matters, no code complexity).
 
 **Meta-criterion that governs everything:** a senior QA does NOT test everything equally — their #1 skill is **knowing what NOT to test.** Prioritize by **risk = impact × probability** (critical, most-used, recently-changed, historically-buggy). The criteria MUST drive prioritization first; otherwise the agent gold-plates (tests everything blindly), the exact opposite of a senior.
 
 **Encoding:** a companion document — `qa-senior-criteria.md` (the "Senior QA Operating Manual") — that the agent loads and applies in **two phases** per mission:
+
 1. **Prioritize:** given the goal and the risk, decide what's worth testing and what isn't.
-2. **Apply** the techniques/heuristics/attributes *only to what was prioritized.*
+2. **Apply** the techniques/heuristics/attributes _only to what was prioritized._
 
 Anatomy of the criteria (full detail in the companion manual):
+
 - **A. Meta:** risk-based prioritization (governs everything).
 - **B. Scenarios:** happy path, negatives/errors, boundaries (empty/null/0/negative/max/long/unicode/special), state (auth/roles/flags), concurrency, idempotency, data integrity, interruptions.
 - **C. Formal techniques:** equivalence partitioning, boundary value analysis, decision tables, state transition, pairwise, error guessing.
@@ -125,7 +128,7 @@ Anatomy of the criteria (full detail in the companion manual):
 - **G. Criteria on the test itself:** independent, deterministic, single focus, contract-not-implementation, test pyramid.
 - **H. Reporting:** severity vs priority, repro, evidence.
 
-**Caveat (honest):** the manual captures a senior's *transferable methodology*. It does NOT capture the tacit knowledge of the app's *specific domain* (where it historically breaks) — the agent infers that per repo.
+**Caveat (honest):** the manual captures a senior's _transferable methodology_. It does NOT capture the tacit knowledge of the app's _specific domain_ (where it historically breaks) — the agent infers that per repo.
 
 **Impact on the eval harness:** evals verify not just "did it generate the test?" but "did it apply the right criteria?" (did it cover boundaries/negatives or only the happy path?, did it prioritize by risk?, did it question the spec?).
 
@@ -151,7 +154,7 @@ You can't improve or trust what you don't measure. Minimal but present from the 
 ## Tech stack
 
 - **Language:** TypeScript / Node — same ecosystem as the Playwright tests (one toolchain, one runtime, simple CI).
-- **Model:** Claude via the **Vercel AI SDK** (thin *and* provider-agnostic; starts on Claude/Opus, swappable in one line).
+- **Model:** Claude via the **Vercel AI SDK** (thin _and_ provider-agnostic; starts on Claude/Opus, swappable in one line).
 - **Testing tool:** Playwright.
 - **Execution:** shell commands via `child_process`, with the guardrails above; portable and headless.
 

@@ -1,7 +1,7 @@
 # The first real run — the make-or-break test
 
-Everything so far proves the *machinery*. This is the test that proves (or
-disproves) the *idea*: can the LLM agent, unsupervised, write trustworthy tests
+Everything so far proves the _machinery_. This is the test that proves (or
+disproves) the _idea_: can the LLM agent, unsupervised, write trustworthy tests
 against a real app? Until you run this, the project is "promising scaffold", not
 "proven". Be skeptical and read the output critically — the goal is honest signal,
 not a green checkmark.
@@ -31,7 +31,7 @@ Only Path B needs the key.
      git; if the app is a subdir of a monorepo, run against that subdir only if it
      is itself a git root — otherwise the guard's path matching won't line up),
    - runnable locally, with **Playwright installed** (`npm i -D @playwright/test &&
-     npx playwright install chromium`).
+npx playwright install chromium`).
 3. A **ticket** describing expected behavior — a file (`--ticket ./PROJ-1.md`) or a
    Jira key (`--jira PROJ-1` with `JIRA_BASE_URL`/`JIRA_EMAIL`/`JIRA_API_TOKEN`).
    Pick a small, well-specified flow (login, a form, a CRUD screen).
@@ -60,7 +60,7 @@ run the trust gates. App source stays read-only (edits are reverted).
 
 ## How to JUDGE the result (be harsh)
 
-1. **Read every generated test by hand.** Does it assert real *behavior*, or did it
+1. **Read every generated test by hand.** Does it assert real _behavior_, or did it
    settle for "the page loaded"? This is where it most likely disappoints.
 2. **Check the mutation proofs.** Open `*.mutation.spec.ts`: does it break the RIGHT
    thing, or a lazy break that fails for the wrong reason? A hollow mutation lets a
@@ -83,7 +83,7 @@ run the trust gates. App source stays read-only (edits are reverted).
   something real. Double down; expand the eval set with these cases.
 - **It writes tests but they're shallow / mostly REJECTED** → the gates are doing
   their job (rejecting junk), but the agent isn't good enough yet. That's still a
-  useful result: the *trust gate* is the defensible product; the autonomous agent
+  useful result: the _trust gate_ is the defensible product; the autonomous agent
   needs work. Consider shipping the gate alone.
 - **It flails (can't start the app, endless reverts)** → the harness needs better
   environment config and prompting before autonomy is realistic. Note exactly where

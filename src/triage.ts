@@ -33,8 +33,10 @@ const LOCATOR_SIGNALS: RegExp[] = [
 const RECOMMENDATION: Record<FailureClass, string> = {
   passing: "No action — the test is stable.",
   flaky: "Stabilize: remove timing dependence; rely on Playwright auto-waiting and semantic locators.",
-  "locator-drift": "Run repair mode (Mission #2): the behavior looks intact, only a selector broke. Re-anchor the locator.",
-  "behavior-regression": "Likely a real bug: observed behavior differs from the expected value. Check against the ticket and file a finding — do NOT edit the test.",
+  "locator-drift":
+    "Run repair mode (Mission #2): the behavior looks intact, only a selector broke. Re-anchor the locator.",
+  "behavior-regression":
+    "Likely a real bug: observed behavior differs from the expected value. Check against the ticket and file a finding — do NOT edit the test.",
   unknown: "Inspect manually — the failure did not match a known signature.",
 };
 
@@ -51,7 +53,10 @@ export function classifyFailure(output: string): { class: FailureClass; evidence
   if (/Expected:/.test(output) && /Received:/.test(output)) {
     const expected = output.match(/Expected:\s*(.+)/)?.[1]?.trim() ?? "?";
     const received = output.match(/Received:\s*(.+)/)?.[1]?.trim() ?? "?";
-    return { class: "behavior-regression", evidence: `Assertion mismatch — expected ${expected}, received ${received}.` };
+    return {
+      class: "behavior-regression",
+      evidence: `Assertion mismatch — expected ${expected}, received ${received}.`,
+    };
   }
   for (const re of LOCATOR_SIGNALS) {
     const match = output.match(re);
@@ -68,18 +73,30 @@ export async function triageSpec(specFile: string, reruns: number, runner: TestR
 
   const passes = runs.filter((r) => r.passed).length;
   if (passes === runs.length) {
-    return { spec, class: "passing", evidence: `Passed all ${runs.length} runs.`, recommendation: RECOMMENDATION.passing };
+    return {
+      spec,
+      class: "passing",
+      evidence: `Passed all ${runs.length} runs.`,
+      recommendation: RECOMMENDATION.passing,
+    };
   }
   if (passes > 0) {
-    return { spec, class: "flaky", evidence: `Passed ${passes}/${runs.length} runs.`, recommendation: RECOMMENDATION.flaky };
+    return {
+      spec,
+      class: "flaky",
+      evidence: `Passed ${passes}/${runs.length} runs.`,
+      recommendation: RECOMMENDATION.flaky,
+    };
   }
   const failing = runs.find((r) => !r.passed) as TestRunResult;
   if (failing.inconclusive === true) {
     return {
       spec,
       class: "unknown",
-      evidence: "Could not run — the app or Playwright is not runnable (environment problem, not a test failure).",
-      recommendation: "Fix the setup (start command, port, browser install), then re-run — this is not the test's fault.",
+      evidence:
+        "Could not run — the app or Playwright is not runnable (environment problem, not a test failure).",
+      recommendation:
+        "Fix the setup (start command, port, browser install), then re-run — this is not the test's fault.",
     };
   }
   const { class: cls, evidence } = classifyFailure(failing.output);

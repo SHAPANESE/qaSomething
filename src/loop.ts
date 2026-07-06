@@ -1,7 +1,7 @@
 import type { RunConfig } from "./config.js";
 import type { Model } from "./model.js";
 import { parseAction } from "./parse.js";
-import { buildMissionPrompt, buildSystemPrompt } from "./prompt.js";
+import { buildMissionPrompt, buildSystemPrompt, type EnvInfo } from "./prompt.js";
 import { runCommand } from "./shell.js";
 import type { CommandResult, Message, RunResult, Step } from "./types.js";
 import { isGitRepo, revertDisallowedChanges } from "./workspace.js";
@@ -15,6 +15,8 @@ export interface RunAgentArgs {
   oracle?: string;
   /** Mission #2 mode: repair failing tests (self-healing) instead of generating. */
   repair?: boolean;
+  /** How to start the app / where it serves — surfaced to the agent. */
+  env?: EnvInfo;
   /** Optional hook fired after each step, for CLI progress rendering. */
   onStep?: (step: Step) => void;
 }
@@ -32,7 +34,9 @@ export function formatObservation(result: CommandResult, maxChars: number): stri
     return `[BLOCKED by guardrails] ${result.blockReason}\nThe command did not run. Choose a different approach.`;
   }
   const parts: string[] = [];
-  parts.push(result.timedOut ? `[timed out after ${Math.round(result.durationMs)}ms]` : `[exit ${result.exitCode}]`);
+  parts.push(
+    result.timedOut ? `[timed out after ${Math.round(result.durationMs)}ms]` : `[exit ${result.exitCode}]`,
+  );
   if (result.revertedPaths.length > 0) {
     parts.push(
       `[GUARDRAIL] Reverted changes outside the write allowlist: ${result.revertedPaths.join(", ")}. ` +
@@ -52,10 +56,10 @@ export function formatObservation(result: CommandResult, maxChars: number): stri
  * back — until the agent finishes or we hit the step ceiling.
  */
 export async function runAgent(args: RunAgentArgs): Promise<RunResult> {
-  const { model, mission, criteriaManual, config, oracle, repair, onStep } = args;
+  const { model, mission, criteriaManual, config, oracle, repair, env, onStep } = args;
 
   const system = buildSystemPrompt(criteriaManual, config, repair === true);
-  const messages: Message[] = [{ role: "user", content: buildMissionPrompt(mission, config, oracle) }];
+  const messages: Message[] = [{ role: "user", content: buildMissionPrompt(mission, config, oracle, env) }];
   const steps: Step[] = [];
 
   const gitBacked = await isGitRepo(config.repoPath);

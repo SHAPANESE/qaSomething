@@ -7,6 +7,8 @@ import { resolveConfig, type RunConfig } from "./config.js";
 import { runAgent } from "./loop.js";
 import { createAnthropicModel } from "./model.js";
 import { fileTicketProvider, formatOracle, jiraProviderFromEnv } from "./oracle.js";
+import { loadProjectConfig, type ProjectConfig } from "./projectConfig.js";
+import type { EnvInfo } from "./prompt.js";
 import type { Step } from "./types.js";
 import { makeTriageRunner, triageSpec } from "./triage.js";
 import { playwrightRunner, verdictToJson, verifyAll, type TestVerdict } from "./verify.js";
@@ -18,6 +20,30 @@ const DEFAULT_CRITERIA = path.resolve(HERE, "..", "docs", "qa-senior-criteria.md
 function inAllowed(relPath: string, dirs: string[]): boolean {
   const p = relPath.split(path.sep).join("/");
   return dirs.some((d) => p === d || p.startsWith(d.replace(/\/$/, "") + "/"));
+}
+
+/** Merge config: built-in defaults < qa-agent.config.json < CLI flags. */
+async function buildConfig(
+  repoPath: string,
+  cli: Partial<RunConfig>,
+): Promise<{ config: RunConfig; project: ProjectConfig | null }> {
+  const project = await loadProjectConfig(repoPath);
+  const merged: Partial<RunConfig> = {};
+  if (project?.allowedWriteDirs) merged.allowedWriteDirs = project.allowedWriteDirs;
+  if (project?.reruns) merged.reruns = project.reruns;
+  if (project?.commandTimeoutMs) merged.commandTimeoutMs = project.commandTimeoutMs;
+  if (project?.maxSteps) merged.maxSteps = project.maxSteps;
+  if (project?.model) merged.modelId = project.model;
+  Object.assign(merged, cli);
+  return { config: resolveConfig(repoPath, merged), project };
+}
+
+function envFrom(project: ProjectConfig | null): EnvInfo | undefined {
+  if (!project) return undefined;
+  const env: EnvInfo = {};
+  if (project.startCommand !== undefined) env.startCommand = project.startCommand;
+  if (project.baseUrl !== undefined) env.baseUrl = project.baseUrl;
+  return env.startCommand === undefined && env.baseUrl === undefined ? undefined : env;
 }
 
 function renderStep(step: Step): void {
@@ -73,7 +99,10 @@ async function runGates(config: RunConfig, specFiles: string[], json = false): P
   const runner = playwrightRunner(config.repoPath, config.commandTimeoutMs);
   let verdicts: TestVerdict[];
   try {
-    if (!json) console.log(`\n${"─".repeat(60)}\nVerifying ${specFiles.length} spec file(s) — quarantine ×${config.reruns} + mutation…`);
+    if (!json)
+      console.log(
+        `\n${"─".repeat(60)}\nVerifying ${specFiles.length} spec file(s) — quarantine ×${config.reruns} + mutation…`,
+      );
     verdicts = await verifyAll(specFiles, config.reruns, runner);
   } catch (err) {
     console.warn(`⚠ Verification could not run (is the app + Playwright runnable?): ${String(err)}`);
@@ -118,8 +147,9 @@ async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
   if (opts.model !== undefined) overrides.modelId = opts.model;
   if (opts.maxSteps !== undefined) overrides.maxSteps = opts.maxSteps;
   if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
-  const config = resolveConfig(path.resolve(opts.repo), overrides);
+  const { config, project } = await buildConfig(path.resolve(opts.repo), overrides);
   const model = createAnthropicModel(config.modelId);
+  const env = envFrom(project);
 
   let oracle: string | undefined;
   if (opts.jira !== undefined) {
@@ -137,7 +167,9 @@ async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
     oracle = formatOracle(ticket);
     console.log(`oracle: ticket ${ticket.id} — ${ticket.title}`);
   } else {
-    console.warn("⚠ No --ticket/--jira: the agent has no source of truth and may encode current behavior (bugs included) as expected.");
+    console.warn(
+      "⚠ No --ticket/--jira: the agent has no source of truth and may encode current behavior (bugs included) as expected.",
+    );
   }
 
   console.log(`qa-agent · model=${config.modelId} · repo=${config.repoPath}\nmission: ${mission}`);
@@ -149,6 +181,7 @@ async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
     onStep: renderStep,
     ...(oracle !== undefined ? { oracle } : {}),
     ...(opts.repair === true ? { repair: true } : {}),
+    ...(env !== undefined ? { env } : {}),
   });
 
   console.log("\n" + "─".repeat(60));
@@ -177,7 +210,7 @@ async function verifyAction(opts: VerifyOpts): Promise<void> {
   const overrides: Partial<RunConfig> = {};
   if (opts.reruns !== undefined) overrides.reruns = opts.reruns;
   if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
-  const config = resolveConfig(path.resolve(opts.repo), overrides);
+  const { config } = await buildConfig(path.resolve(opts.repo), overrides);
   const specs = await discoverSpecs(config, opts.all === true);
   const ok = await runGates(config, specs, opts.json === true);
   if (!ok) process.exitCode = 1;
@@ -195,7 +228,7 @@ async function triageAction(opts: TriageOpts): Promise<void> {
   const overrides: Partial<RunConfig> = {};
   if (opts.reruns !== undefined) overrides.reruns = opts.reruns;
   if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
-  const config = resolveConfig(path.resolve(opts.repo), overrides);
+  const { config } = await buildConfig(path.resolve(opts.repo), overrides);
 
   const specs =
     opts.spec !== undefined
@@ -253,6 +286,9 @@ program
   .action(triageAction);
 
 program.parseAsync().catch((err: unknown) => {
-  console.error(err);
+  // Expected failures (bad config, missing ticket, …) get a clean message; only
+  // truly unexpected errors show a stack, and only when DEBUG is set.
+  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+  if (process.env["DEBUG"] && err instanceof Error) console.error(err.stack);
   process.exitCode = 1;
 });

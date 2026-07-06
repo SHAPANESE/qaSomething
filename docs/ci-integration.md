@@ -9,18 +9,18 @@ Template workflow: [`docs/ci/qa-gate.yml`](ci/qa-gate.yml) — copy into your ap
 
 ## The three layers
 
-| Layer | When | What runs | On the critical path? |
-|-------|------|-----------|-----------------------|
-| **1 — Deterministic suite** | every PR | the trusted Playwright tests (`playwright test`) | ✅ yes — gates the merge |
-| **Trust gate** | every PR | `qa-agent verify --all --json` — quarantine + mutation polarity on the tests themselves | ✅ yes — blocks a PR that adds a hollow or flaky test |
-| **3 — Triage** | on failure | `qa-agent triage --all` — classify each failure (drift / regression / flaky) | annotation only |
-| **2 — Agentic maintenance** | nightly / manual | `qa-agent run … --jira …` generates & maintains tests, opens a PR | ❌ no — off the critical path |
+| Layer                       | When             | What runs                                                                               | On the critical path?                                 |
+| --------------------------- | ---------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **1 — Deterministic suite** | every PR         | the trusted Playwright tests (`playwright test`)                                        | ✅ yes — gates the merge                              |
+| **Trust gate**              | every PR         | `qa-agent verify --all --json` — quarantine + mutation polarity on the tests themselves | ✅ yes — blocks a PR that adds a hollow or flaky test |
+| **3 — Triage**              | on failure       | `qa-agent triage --all` — classify each failure (drift / regression / flaky)            | annotation only                                       |
+| **2 — Agentic maintenance** | nightly / manual | `qa-agent run … --jira …` generates & maintains tests, opens a PR                       | ❌ no — off the critical path                         |
 
 ## Why the gate matters
 
 Layer 1 alone tells you the tests **pass**. The trust gate tells you the tests are
 **worth passing** — it re-runs each test (quarantine) and runs its mutation proof,
-so an always-green or flaky test is rejected *before it merges* instead of rotting
+so an always-green or flaky test is rejected _before it merges_ instead of rotting
 the suite later.
 
 - **Exit code:** `verify` exits non-zero if any test is untrusted → the gate fails

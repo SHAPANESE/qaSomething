@@ -27,8 +27,14 @@ export function parseTicketContent(ref: string, raw: string): Ticket {
 
   if (ref.endsWith(".json")) {
     const data = JSON.parse(raw) as Record<string, unknown>;
-    const id = typeof data["id"] === "string" ? data["id"] : typeof data["key"] === "string" ? data["key"] : base;
-    const title = typeof data["title"] === "string" ? data["title"] : typeof data["summary"] === "string" ? data["summary"] : id;
+    const id =
+      typeof data["id"] === "string" ? data["id"] : typeof data["key"] === "string" ? data["key"] : base;
+    const title =
+      typeof data["title"] === "string"
+        ? data["title"]
+        : typeof data["summary"] === "string"
+          ? data["summary"]
+          : id;
     const body =
       typeof data["acceptanceCriteria"] === "string"
         ? data["acceptanceCriteria"]
@@ -69,7 +75,14 @@ interface AdfNode {
   content?: unknown[];
 }
 
-const ADF_BLOCK_TYPES = new Set(["paragraph", "heading", "listItem", "bulletList", "orderedList", "codeBlock"]);
+const ADF_BLOCK_TYPES = new Set([
+  "paragraph",
+  "heading",
+  "listItem",
+  "bulletList",
+  "orderedList",
+  "codeBlock",
+]);
 
 /** Pure: flatten Atlassian Document Format (Jira's rich description) to plain text. */
 export function adfToText(node: unknown): string {

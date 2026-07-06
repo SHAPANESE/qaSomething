@@ -98,14 +98,29 @@ Rules:
  * When an oracle (ticket) is provided, it is the source of truth for expected
  * behavior and is injected here.
  */
-export function buildMissionPrompt(mission: string, config: RunConfig, oracle?: string): string {
+export interface EnvInfo {
+  startCommand?: string;
+  baseUrl?: string;
+}
+
+export function buildMissionPrompt(
+  mission: string,
+  config: RunConfig,
+  oracle?: string,
+  env?: EnvInfo,
+): string {
   const oracleBlock = oracle ? `\n\n${oracle}\n` : "";
+  const envLines = [
+    env?.startCommand ? `- start the app with: ${env.startCommand}` : "",
+    env?.baseUrl ? `- base URL: ${env.baseUrl}` : "",
+  ].filter(Boolean);
+  const envBlock = envLines.length > 0 ? `\n\nEnvironment:\n${envLines.join("\n")}` : "";
   return `MISSION: ${mission}
-${oracleBlock}
+${oracleBlock}${envBlock}
 Repository under test: ${config.repoPath}
 You may write to: ${config.allowedWriteDirs.map((d) => `${d}/`).join(", ")}
 
 Start by orienting yourself (read the repo, find how the app runs${
-    oracle ? "" : " and what the relevant acceptance criteria are"
-  }), then prioritize by risk before writing any test.`;
+    envLines.length > 0 ? "" : " it"
+  }${oracle ? "" : " and what the relevant acceptance criteria are"}), then prioritize by risk before writing any test.`;
 }

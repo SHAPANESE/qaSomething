@@ -87,10 +87,7 @@ export type MutationVerdict =
   | { kind: "no-mutation-proof" };
 
 /** Pure: check real→pass / mutation→fail polarity. */
-export function checkMutationPolarity(
-  real: Stability,
-  mutation: TestRunResult | null,
-): MutationVerdict {
+export function checkMutationPolarity(real: Stability, mutation: TestRunResult | null): MutationVerdict {
   if (real.kind !== "stable-pass") return { kind: "baseline-broken" };
   if (mutation === null) return { kind: "no-mutation-proof" };
   return mutation.passed ? { kind: "not-meaningful" } : { kind: "meaningful" };
@@ -105,14 +102,12 @@ export interface TestVerdict {
   reasons: string[];
 }
 
-export function decideVerdict(
-  spec: string,
-  stability: Stability,
-  mutation: MutationVerdict,
-): TestVerdict {
+export function decideVerdict(spec: string, stability: Stability, mutation: MutationVerdict): TestVerdict {
   const reasons: string[] = [];
   if (stability.kind === "inconclusive")
-    reasons.push("Could not run — the app or Playwright is not runnable (an environment problem, NOT a test failure). Fix the setup, then re-verify.");
+    reasons.push(
+      "Could not run — the app or Playwright is not runnable (an environment problem, NOT a test failure). Fix the setup, then re-verify.",
+    );
   if (stability.kind === "failing") reasons.push("Test fails on a clean run.");
   if (stability.kind === "flaky") reasons.push(`Flaky: passed ${stability.passes}/${stability.runs} runs.`);
   if (mutation.kind === "not-meaningful")

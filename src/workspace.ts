@@ -49,9 +49,7 @@ export function underPrefix(gitPath: string, prefix: string): string | null {
 
 function isAllowed(relPath: string, allowedDirs: string[]): boolean {
   const normalized = relPath.split(path.sep).join("/");
-  return allowedDirs.some(
-    (dir) => normalized === dir || normalized.startsWith(dir.replace(/\/$/, "") + "/"),
-  );
+  return allowedDirs.some((dir) => normalized === dir || normalized.startsWith(dir.replace(/\/$/, "") + "/"));
 }
 
 interface GitChange {
@@ -94,10 +92,7 @@ export async function listChangedPaths(cwd: string): Promise<string[]> {
  * paths that were reverted so the caller can surface the guardrail action back
  * to the agent (it needs to know its edit was undone and why).
  */
-export async function revertDisallowedChanges(
-  cwd: string,
-  allowedDirs: string[],
-): Promise<string[]> {
+export async function revertDisallowedChanges(cwd: string, allowedDirs: string[]): Promise<string[]> {
   const status = await execa("git", ["status", "--porcelain"], { cwd, reject: false });
   if (status.exitCode !== 0) return [];
 
