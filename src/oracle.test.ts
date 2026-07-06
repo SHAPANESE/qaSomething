@@ -16,7 +16,11 @@ describe("parseTicketContent", () => {
   });
 
   it("parses JSON tickets with id/summary/acceptanceCriteria", () => {
-    const raw = JSON.stringify({ key: "JIRA-99", summary: "Password reset", acceptanceCriteria: "must email a link" });
+    const raw = JSON.stringify({
+      key: "JIRA-99",
+      summary: "Password reset",
+      acceptanceCriteria: "must email a link",
+    });
     const t = parseTicketContent("ticket.json", raw);
     expect(t.id).toBe("JIRA-99");
     expect(t.title).toBe("Password reset");
@@ -61,7 +65,13 @@ describe("parseJiraIssue", () => {
   it("flattens an ADF description", () => {
     const t = parseJiraIssue({
       key: "PROJ-1",
-      fields: { summary: "S", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "criteria" }] }] } },
+      fields: {
+        summary: "S",
+        description: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "criteria" }] }],
+        },
+      },
     });
     expect(t.body).toBe("criteria");
   });
@@ -95,8 +105,14 @@ describe("jiraTicketProvider", () => {
   });
 
   it("throws on a non-OK response", async () => {
-    const fakeFetch = (async () => ({ ok: false, status: 404, json: async () => ({}) }) as Response) as typeof fetch;
-    const provider = jiraTicketProvider({ baseUrl: "https://x.atlassian.net", email: "e", token: "t", fetch: fakeFetch });
+    const fakeFetch = (async () =>
+      ({ ok: false, status: 404, json: async () => ({}) }) as Response) as typeof fetch;
+    const provider = jiraTicketProvider({
+      baseUrl: "https://x.atlassian.net",
+      email: "e",
+      token: "t",
+      fetch: fakeFetch,
+    });
     await expect(provider.load("NOPE-1")).rejects.toThrow(/HTTP 404/);
   });
 });

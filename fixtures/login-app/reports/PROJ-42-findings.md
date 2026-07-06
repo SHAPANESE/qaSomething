@@ -6,11 +6,11 @@ violated by the app.
 
 ## Summary
 
-| AC | Behavior | Result |
-|----|----------|--------|
-| AC1 | Valid credentials → "Welcome, user@test.com" | ✅ Pass (trusted test) |
-| AC2 | Wrong password → "Invalid credentials" | ✅ Pass (trusted test) |
-| AC3 | Empty email → "Email is required", no auth attempt | ❌ **BUG** |
+| AC  | Behavior                                           | Result                 |
+| --- | -------------------------------------------------- | ---------------------- |
+| AC1 | Valid credentials → "Welcome, user@test.com"       | ✅ Pass (trusted test) |
+| AC2 | Wrong password → "Invalid credentials"             | ✅ Pass (trusted test) |
+| AC3 | Empty email → "Email is required", no auth attempt | ❌ **BUG**             |
 
 ## BUG-1 — Empty email is not validated (violates AC3)
 
@@ -23,11 +23,13 @@ does NOT call the login API.
 **Actual:** the app shows `Invalid credentials` and DOES call the login API.
 
 **Steps to reproduce:**
+
 1. Open the sign-in page.
 2. Leave Email empty; enter any password.
 3. Click "Sign in".
 
 **Evidence (exploratory probe):**
+
 ```
 message shown:    "Invalid credentials"
 expected (AC3):   "Email is required"
@@ -35,6 +37,7 @@ login API called: true  [ 'POST http://localhost:3100/api/login' ]
 ```
 
 **Two distinct violations:**
+
 1. Wrong message — generic "Invalid credentials" instead of the specific
    "Email is required". The ticket explicitly calls this out as unacceptable.
 2. Unnecessary auth attempt — an empty-email submit should be rejected client-side

@@ -20,7 +20,9 @@ describe("parseAction", () => {
   });
 
   it("parses a finish block and returns its summary", () => {
-    const action = parseAction("All done.\n```done\nWrote login.spec.ts; it catches the empty-email bug.\n```");
+    const action = parseAction(
+      "All done.\n```done\nWrote login.spec.ts; it catches the empty-email bug.\n```",
+    );
     expect(action).toEqual({
       kind: "finish",
       summary: "Wrote login.spec.ts; it catches the empty-email bug.",
@@ -49,7 +51,7 @@ describe("parseAction", () => {
   });
 
   it("returns none when the only fence is an unrelated language", () => {
-    const action = parseAction("```json\n{\"a\":1}\n```");
+    const action = parseAction('```json\n{"a":1}\n```');
     expect(action.kind).toBe("none");
   });
 });

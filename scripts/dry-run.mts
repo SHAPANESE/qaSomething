@@ -56,7 +56,10 @@ const checks: [string, boolean][] = [
   ["loop finished cleanly", result.finished],
   ["test file written to tests/ (allowed)", testWritten],
   ["app-source edit was REVERTED by the guard", appEditReverted],
-  ["guard reported the revert", revertStep !== undefined && revertStep.result!.revertedPaths.includes("server.mjs")],
+  [
+    "guard reported the revert",
+    revertStep !== undefined && revertStep.result!.revertedPaths.includes("server.mjs"),
+  ],
   ["dangerous command was BLOCKED", blockedStep !== undefined],
 ];
 

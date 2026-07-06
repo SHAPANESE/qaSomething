@@ -116,8 +116,15 @@ describe("decideVerdict", () => {
 
 describe("verdictToJson", () => {
   it("flattens a verdict to a CI-consumable shape", () => {
-    const json = verdictToJson(decideVerdict("login.spec.ts", { kind: "stable-pass" }, { kind: "meaningful" }));
-    expect(json).toMatchObject({ spec: "login.spec.ts", trusted: true, stability: "stable-pass", mutation: "meaningful" });
+    const json = verdictToJson(
+      decideVerdict("login.spec.ts", { kind: "stable-pass" }, { kind: "meaningful" }),
+    );
+    expect(json).toMatchObject({
+      spec: "login.spec.ts",
+      trusted: true,
+      stability: "stable-pass",
+      mutation: "meaningful",
+    });
     expect(Array.isArray(json.reasons)).toBe(true);
   });
 });

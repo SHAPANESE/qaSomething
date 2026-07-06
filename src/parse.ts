@@ -38,8 +38,7 @@ export function parseAction(assistant: string): ParsedAction {
   if (blocks.length === 0) {
     return {
       kind: "none",
-      reason:
-        "No fenced code block found. Emit exactly one ```bash command or a ```done summary.",
+      reason: "No fenced code block found. Emit exactly one ```bash command or a ```done summary.",
     };
   }
 

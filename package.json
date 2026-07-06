@@ -3,6 +3,27 @@
   "version": "0.1.0",
   "description": "A senior-QA-minded, SWE-style agent that generates trustworthy Playwright tests. Engine inspired by mini-swe-agent / Microsoft Webwright; the differentiator is the senior-QA criteria brain on top.",
   "type": "module",
+  "keywords": [
+    "qa",
+    "testing",
+    "playwright",
+    "ai-agent",
+    "test-generation",
+    "e2e",
+    "mutation-testing",
+    "claude"
+  ],
+  "author": "fgentile@folderit.net",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "bin": {
     "qa-agent": "./dist/index.js"
   },
@@ -11,7 +32,11 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
   },
   "license": "MIT",
   "packageManager": "pnpm@11.8.0",
@@ -23,9 +48,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.0",
+    "eslint": "^10.6.0",
+    "prettier": "^3.9.4",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.1",
     "vitest": "^4.1.9"
   }
 }

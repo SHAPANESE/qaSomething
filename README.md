@@ -27,6 +27,7 @@ The harness runs both and requires real→PASS, mutation→FAIL; a hollow test i
 rejected.
 
 **Also built:**
+
 - **Eval harness** (`src/eval.ts`, `evals/*.eval.json`) — scores whether the trust
   gates classify a labeled test set correctly. Fixture eval: 3/3.
 - **`verify` subcommand** — `qa-agent verify --repo <path> --all` runs the gates on
@@ -75,16 +76,16 @@ Options: `--model <id>`, `--max-steps <n>`, `--timeout <ms>`, `--criteria <path>
 
 ## Layout
 
-| File | Responsibility |
-|---|---|
-| `src/loop.ts` | The agent loop; observation formatting |
-| `src/shell.ts` | Command screening + sandboxed execution |
-| `src/workspace.ts` | Git-backed write-allowlist enforcement |
-| `src/parse.ts` | Extract the one action from a model turn |
-| `src/model.ts` | Thin, swappable model boundary (Claude via Vercel AI SDK) |
-| `src/prompt.ts` | System prompt + embedded criteria manual |
-| `src/config.ts` | Run configuration + defaults |
-| `src/index.ts` | CLI |
+| File               | Responsibility                                            |
+| ------------------ | --------------------------------------------------------- |
+| `src/loop.ts`      | The agent loop; observation formatting                    |
+| `src/shell.ts`     | Command screening + sandboxed execution                   |
+| `src/workspace.ts` | Git-backed write-allowlist enforcement                    |
+| `src/parse.ts`     | Extract the one action from a model turn                  |
+| `src/model.ts`     | Thin, swappable model boundary (Claude via Vercel AI SDK) |
+| `src/prompt.ts`    | System prompt + embedded criteria manual                  |
+| `src/config.ts`    | Run configuration + defaults                              |
+| `src/index.ts`     | CLI                                                       |
 
 ## Test
 

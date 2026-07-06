@@ -20,6 +20,7 @@ Test first what scores high on both:
 **Phase 1 output:** a short, ordered list of "what's worth testing", with low-risk items explicitly discarded. If you discarded nothing, you didn't prioritize.
 
 Guiding questions:
+
 - If this fails in production, how bad is it? Who is affected?
 - What hurts most if it breaks?
 - What changed recently? (recent change concentrates risk)
@@ -50,7 +51,7 @@ Pick the technique by the type of logic:
 - **Boundary value analysis:** bugs live at the edges. Test min-1, min, min+1, max-1, max, max+1.
 - **Decision tables:** when the result depends on combinations of conditions, tabulate the relevant combinations.
 - **State transition:** for stateful flows (cart → checkout → paid), test valid AND invalid transitions (can I skip a step? go back?).
-- **Pairwise / combinatorial:** with many parameters, cover all *pairs* of values instead of all combinations (combinatorial explosion).
+- **Pairwise / combinatorial:** with many parameters, cover all _pairs_ of values instead of all combinations (combinatorial explosion).
 - **Error guessing:** experience — "where does this usually break?". Dates, timezones, money rounding, off-by-one, encoding, concurrency.
 
 ### C. Cross-cutting quality attributes (non-functional)
@@ -87,7 +88,7 @@ To discover what to test when there's no clear spec:
 
 A bad test is debt. Every generated test must be:
 
-- **Meaningful:** it verifies *behavior*, not that "the page loaded". It must **fail when the behavior breaks** (mutation check mandatory).
+- **Meaningful:** it verifies _behavior_, not that "the page loaded". It must **fail when the behavior breaks** (mutation check mandatory).
 - **Independent:** doesn't depend on order or state left by another test. Its own setup/teardown, clean state.
 - **Deterministic:** no flakiness. Semantic locators (`getByRole`/`getByLabel`/`data-testid`), auto-wait, **zero arbitrary `sleep`s**, no reliance on timing.
 - **Single focus:** a test verifies one thing. A name that describes the expected behavior ("shows an error if email is empty"), not the mechanics.
@@ -121,7 +122,7 @@ When you find a bug:
 ## How the agent uses this (operational summary)
 
 1. **Prioritize** (Phase 1): list what to test by risk, explicitly discard the low-value stuff.
-2. For each prioritized item, **choose** the *relevant* scenarios (A), techniques (B) and attributes (C) — not all of them.
+2. For each prioritized item, **choose** the _relevant_ scenarios (A), techniques (B) and attributes (C) — not all of them.
 3. Define the **oracle** (D) for each case; if the spec is ambiguous, **flag it as a finding**.
 4. Write tests that meet the **quality criteria** (F) and pass the **mutation check**.
 5. Report with **evidence and severity/priority** (G).

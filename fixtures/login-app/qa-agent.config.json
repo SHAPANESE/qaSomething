@@ -1,0 +1,6 @@
+{
+  "startCommand": "node server.mjs",
+  "baseUrl": "http://localhost:3100",
+  "reruns": 2,
+  "allowedWriteDirs": ["tests", "reports"]
+}
