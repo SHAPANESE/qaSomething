@@ -6,7 +6,7 @@ import type { RunConfig } from "./config.js";
  * manual (the "brain"). The mission itself is passed separately as the first
  * user turn, not here.
  */
-export function buildSystemPrompt(criteriaManual: string, config: RunConfig): string {
+export function buildSystemPrompt(criteriaManual: string, config: RunConfig, repair = false): string {
   const allowed = config.allowedWriteDirs.map((d) => `\`${d}/\``).join(", ");
   return `You are a senior QA engineer working as an autonomous agent. You test a web
 application by acting through a shell, one command at a time, and your job is to
@@ -71,8 +71,27 @@ you operate by:
 ${criteriaManual}
 ---
 
-Begin when you receive the mission. Work in small, verifiable steps.`;
+Begin when you receive the mission. Work in small, verifiable steps.${repair ? "\n\n" + REPAIR_GUIDANCE : ""}`;
 }
+
+/** Mission #2 (auto-repair) guidance, appended to the system prompt in repair mode. */
+export const REPAIR_GUIDANCE = `## Mission mode: REPAIR (self-healing)
+
+You are fixing tests that fail because the UI changed — NOT adding new coverage.
+
+Decide this FIRST for each failing test, using the ticket as the oracle:
+- LOCATOR DRIFT: the behavior still satisfies the ticket, but a selector no longer
+  resolves (renamed label, moved node, changed data-testid). → Re-anchor the
+  locator to the new element, preferring the most stable semantic locator.
+- REAL REGRESSION: the behavior itself changed and now violates the ticket. → Do
+  NOT touch the test. Report a bug finding. "Repairing" this would hide the
+  regression — the worst thing a QA agent can do.
+
+Rules:
+- Only re-anchor LOCATORS. NEVER weaken, remove, or change an assertion to make a
+  test green — that defeats the entire purpose.
+- Keep each test's \`*.mutation.spec.ts\` proof in sync (repair its locator too).
+- After repair, the test must still be TRUSTED by the gates.`;
 
 /**
  * Wrap the user's mission with the concrete repo context for the first turn.

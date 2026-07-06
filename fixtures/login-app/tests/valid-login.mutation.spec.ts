@@ -14,6 +14,6 @@ test("AC1 [mutation]: welcome must not appear when the login API is broken", asy
   await page.goto("/");
   await page.getByLabel("Email").fill("user@test.com");
   await page.getByLabel("Password").fill("secret123");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Log in" }).click();
   await expect(page.getByRole("status")).toHaveText("Welcome, user@test.com");
 });

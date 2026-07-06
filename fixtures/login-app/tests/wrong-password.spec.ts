@@ -5,6 +5,6 @@ test("AC2: a wrong password shows Invalid credentials", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Email").fill("user@test.com");
   await page.getByLabel("Password").fill("wrong-password");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Log in" }).click();
   await expect(page.getByRole("status")).toHaveText("Invalid credentials");
 });

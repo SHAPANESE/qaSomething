@@ -13,6 +13,8 @@ export interface RunAgentArgs {
   config: RunConfig;
   /** Source-of-truth block (from a ticket) injected into the mission. */
   oracle?: string;
+  /** Mission #2 mode: repair failing tests (self-healing) instead of generating. */
+  repair?: boolean;
   /** Optional hook fired after each step, for CLI progress rendering. */
   onStep?: (step: Step) => void;
 }
@@ -50,9 +52,9 @@ export function formatObservation(result: CommandResult, maxChars: number): stri
  * back — until the agent finishes or we hit the step ceiling.
  */
 export async function runAgent(args: RunAgentArgs): Promise<RunResult> {
-  const { model, mission, criteriaManual, config, oracle, onStep } = args;
+  const { model, mission, criteriaManual, config, oracle, repair, onStep } = args;
 
-  const system = buildSystemPrompt(criteriaManual, config);
+  const system = buildSystemPrompt(criteriaManual, config, repair === true);
   const messages: Message[] = [{ role: "user", content: buildMissionPrompt(mission, config, oracle) }];
   const steps: Step[] = [];
 

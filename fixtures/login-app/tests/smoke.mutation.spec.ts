@@ -7,5 +7,5 @@ test("smoke [mutation]: still passes with the API broken (that is the problem)",
   await page.route("**/api/login", (route) => route.fulfill({ status: 500, body: "{}" }));
   await page.goto("/");
   await expect(page).toHaveTitle("Sign in");
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Log in" })).toBeVisible();
 });

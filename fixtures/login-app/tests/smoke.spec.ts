@@ -6,5 +6,5 @@ import { test, expect } from "@playwright/test";
 test("smoke: the sign-in page loads", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveTitle("Sign in");
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Log in" })).toBeVisible();
 });

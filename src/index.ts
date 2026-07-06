@@ -95,6 +95,7 @@ interface RunOpts {
   maxSteps?: number;
   timeout?: number;
   skipVerify?: boolean;
+  repair?: boolean;
 }
 
 async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
@@ -139,6 +140,7 @@ async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
     config,
     onStep: renderStep,
     ...(oracle !== undefined ? { oracle } : {}),
+    ...(opts.repair === true ? { repair: true } : {}),
   });
 
   console.log("\n" + "─".repeat(60));
@@ -186,6 +188,7 @@ program
   .option("--max-steps <n>", "Max loop iterations", (v) => Number.parseInt(v, 10))
   .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
   .option("--skip-verify", "Skip the post-run trust gates")
+  .option("--repair", "Mission #2: repair failing tests (self-healing) instead of generating")
   .action(runAgentAction);
 
 program
