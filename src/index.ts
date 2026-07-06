@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { resolveConfig, type RunConfig } from "./config.js";
 import { runAgent } from "./loop.js";
 import { createAnthropicModel } from "./model.js";
-import { fileTicketProvider, formatOracle } from "./oracle.js";
+import { fileTicketProvider, formatOracle, jiraProviderFromEnv } from "./oracle.js";
 import type { Step } from "./types.js";
 import { playwrightRunner, verifyAll, type TestVerdict } from "./verify.js";
 import { isGitRepo, listChangedPaths } from "./workspace.js";
@@ -89,6 +89,7 @@ async function runGates(config: RunConfig, specFiles: string[]): Promise<boolean
 interface RunOpts {
   repo: string;
   ticket?: string;
+  jira?: string;
   criteria: string;
   model?: string;
   maxSteps?: number;
@@ -112,12 +113,22 @@ async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
   const model = createAnthropicModel(config.modelId);
 
   let oracle: string | undefined;
-  if (opts.ticket !== undefined) {
+  if (opts.jira !== undefined) {
+    const provider = jiraProviderFromEnv(process.env);
+    if (provider === null) {
+      console.error("Error: --jira needs JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN in the environment.");
+      process.exitCode = 1;
+      return;
+    }
+    const ticket = await provider.load(opts.jira);
+    oracle = formatOracle(ticket);
+    console.log(`oracle: Jira ${ticket.id} — ${ticket.title}`);
+  } else if (opts.ticket !== undefined) {
     const ticket = await fileTicketProvider.load(opts.ticket);
     oracle = formatOracle(ticket);
     console.log(`oracle: ticket ${ticket.id} — ${ticket.title}`);
   } else {
-    console.warn("⚠ No --ticket: the agent has no source of truth and may encode current behavior (bugs included) as expected.");
+    console.warn("⚠ No --ticket/--jira: the agent has no source of truth and may encode current behavior (bugs included) as expected.");
   }
 
   console.log(`qa-agent · model=${config.modelId} · repo=${config.repoPath}\nmission: ${mission}`);
@@ -169,6 +180,7 @@ program
   .description("Run the QA agent to generate tests, then verify them")
   .requiredOption("-r, --repo <path>", "Path to the repo under test")
   .option("-t, --ticket <ref>", "Ticket file that defines expected behavior (the oracle)")
+  .option("-j, --jira <key>", "Jira issue key as the oracle (needs JIRA_BASE_URL/JIRA_EMAIL/JIRA_API_TOKEN)")
   .option("-c, --criteria <path>", "Path to the senior-QA criteria manual", DEFAULT_CRITERIA)
   .option("-m, --model <id>", "Anthropic model id")
   .option("--max-steps <n>", "Max loop iterations", (v) => Number.parseInt(v, 10))

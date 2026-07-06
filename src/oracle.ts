@@ -52,6 +52,70 @@ export const fileTicketProvider: TicketProvider = {
   },
 };
 
+// --- Jira provider (Cloud REST v3) ---------------------------------------
+
+export interface JiraConfig {
+  /** e.g. https://your-domain.atlassian.net */
+  baseUrl: string;
+  email: string;
+  token: string;
+  /** Injectable for testing; defaults to global fetch. */
+  fetch?: typeof fetch;
+}
+
+interface AdfNode {
+  type?: string;
+  text?: string;
+  content?: unknown[];
+}
+
+const ADF_BLOCK_TYPES = new Set(["paragraph", "heading", "listItem", "bulletList", "orderedList", "codeBlock"]);
+
+/** Pure: flatten Atlassian Document Format (Jira's rich description) to plain text. */
+export function adfToText(node: unknown): string {
+  if (node === null || typeof node !== "object") return "";
+  const n = node as AdfNode;
+  if (typeof n.text === "string") return n.text;
+  const inner = Array.isArray(n.content) ? n.content.map(adfToText).join("") : "";
+  return ADF_BLOCK_TYPES.has(n.type ?? "") ? inner + "\n" : inner;
+}
+
+/** Pure: map a Jira issue payload to a Ticket. */
+export function parseJiraIssue(data: unknown): Ticket {
+  const issue = (data ?? {}) as { key?: string; fields?: Record<string, unknown> };
+  const key = typeof issue.key === "string" ? issue.key : "JIRA";
+  const fields = issue.fields ?? {};
+  const title = typeof fields["summary"] === "string" ? fields["summary"] : key;
+  const description = fields["description"];
+  const body = typeof description === "string" ? description : adfToText(description);
+  return { id: key, title, body: body.trim() };
+}
+
+export function jiraTicketProvider(cfg: JiraConfig): TicketProvider {
+  const doFetch = cfg.fetch ?? fetch;
+  const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString("base64");
+  const base = cfg.baseUrl.replace(/\/$/, "");
+  return {
+    async load(ref) {
+      const url = `${base}/rest/api/3/issue/${encodeURIComponent(ref)}?fields=summary,description`;
+      const res = await doFetch(url, {
+        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+      });
+      if (!res.ok) throw new Error(`Jira ${ref}: HTTP ${res.status}`);
+      return parseJiraIssue(await res.json());
+    },
+  };
+}
+
+/** Build a Jira provider from env vars, or null if they're not all set. */
+export function jiraProviderFromEnv(env: NodeJS.ProcessEnv): TicketProvider | null {
+  const baseUrl = env["JIRA_BASE_URL"];
+  const email = env["JIRA_EMAIL"];
+  const token = env["JIRA_API_TOKEN"];
+  if (!baseUrl || !email || !token) return null;
+  return jiraTicketProvider({ baseUrl, email, token });
+}
+
 /** The oracle block injected into the mission so the agent tests against the ticket. */
 export function formatOracle(ticket: Ticket): string {
   return `## Source of truth — ticket ${ticket.id}
