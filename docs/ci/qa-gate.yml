@@ -1,0 +1,75 @@
+# TEMPLATE — copy into YOUR app repo at .github/workflows/qa-gate.yml.
+#
+# Implements the 3-layer verification model (Mission #4: de-serialize the QA gate).
+# A non-deterministic agent NEVER runs on the PR critical path — only its OUTPUT
+# (deterministic trusted tests) gates PRs. The agent runs off to the side.
+#
+# Assumes qa-agent is available (as a devDependency, or `npx qa-agent`, or a path).
+
+name: QA Gate
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *" # nightly — Layer 2 (agentic maintenance)
+  workflow_dispatch:
+
+jobs:
+  # LAYER 1 — deterministic suite. The trusted tests run like any test, every PR.
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test # your app's trusted suite
+
+  # GATE — trust gates on the tests themselves. Blocks a PR that introduces a
+  # hollow (always-green) or flaky test. This is what keeps the suite trustworthy.
+  trust-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify tests are trustworthy (quarantine + mutation polarity)
+        run: npx qa-agent verify --repo . --all --json
+      # LAYER 3 — on failure, classify WHY (routes to repair vs bug report).
+      - name: Triage failures
+        if: failure()
+        run: npx qa-agent triage --repo . --all || true
+
+  # LAYER 2 — agentic maintenance, OFF the critical path (nightly / manual only).
+  # Generates and maintains tests from tickets, then opens a PR for humans to review.
+  generate:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Generate/maintain tests from a ticket
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: npx qa-agent run "Regression-test the recently changed areas" --repo . --jira "${{ vars.QA_TICKET }}" || true
+      - name: Open a PR with the new/updated tests
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: qa-agent/updates
+          title: "qa-agent: test updates"
+          commit-message: "qa-agent: generated/maintained tests"

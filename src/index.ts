@@ -9,7 +9,7 @@ import { createAnthropicModel } from "./model.js";
 import { fileTicketProvider, formatOracle, jiraProviderFromEnv } from "./oracle.js";
 import type { Step } from "./types.js";
 import { makeTriageRunner, triageSpec } from "./triage.js";
-import { playwrightRunner, verifyAll, type TestVerdict } from "./verify.js";
+import { playwrightRunner, verdictToJson, verifyAll, type TestVerdict } from "./verify.js";
 import { isGitRepo, listChangedPaths } from "./workspace.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -64,20 +64,27 @@ async function discoverSpecs(config: RunConfig, all: boolean): Promise<string[]>
   return found;
 }
 
-async function runGates(config: RunConfig, specFiles: string[]): Promise<boolean> {
+async function runGates(config: RunConfig, specFiles: string[], json = false): Promise<boolean> {
   if (specFiles.length === 0) {
-    console.log("No test files to verify.");
+    if (json) console.log("[]");
+    else console.log("No test files to verify.");
     return true;
   }
-  console.log(`\n${"─".repeat(60)}\nVerifying ${specFiles.length} spec file(s) — quarantine ×${config.reruns} + mutation…`);
   const runner = playwrightRunner(config.repoPath, config.commandTimeoutMs);
   let verdicts: TestVerdict[];
   try {
+    if (!json) console.log(`\n${"─".repeat(60)}\nVerifying ${specFiles.length} spec file(s) — quarantine ×${config.reruns} + mutation…`);
     verdicts = await verifyAll(specFiles, config.reruns, runner);
   } catch (err) {
     console.warn(`⚠ Verification could not run (is the app + Playwright runnable?): ${String(err)}`);
     return true;
   }
+
+  if (json) {
+    console.log(JSON.stringify(verdicts.map(verdictToJson), null, 2));
+    return verdicts.every((v) => v.trusted);
+  }
+
   let anyUntrusted = false;
   for (const v of verdicts) {
     console.log(`\n${v.trusted ? "✔ TRUSTED " : "✗ REJECTED"}  ${path.basename(v.spec)}`);
@@ -163,6 +170,7 @@ interface VerifyOpts {
   reruns?: number;
   timeout?: number;
   all?: boolean;
+  json?: boolean;
 }
 
 async function verifyAction(opts: VerifyOpts): Promise<void> {
@@ -171,7 +179,7 @@ async function verifyAction(opts: VerifyOpts): Promise<void> {
   if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
   const config = resolveConfig(path.resolve(opts.repo), overrides);
   const specs = await discoverSpecs(config, opts.all === true);
-  const ok = await runGates(config, specs);
+  const ok = await runGates(config, specs, opts.json === true);
   if (!ok) process.exitCode = 1;
 }
 
@@ -231,6 +239,7 @@ program
   .option("--reruns <n>", "Quarantine re-runs per test", (v) => Number.parseInt(v, 10))
   .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
   .option("--all", "Verify all specs under the write dirs, not just git-changed ones")
+  .option("--json", "Emit machine-readable JSON verdicts (for CI)")
   .action(verifyAction);
 
 program

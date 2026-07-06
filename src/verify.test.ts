@@ -5,6 +5,7 @@ import {
   decideVerdict,
   interpretRun,
   pairSpecs,
+  verdictToJson,
   verifySpec,
   type TestRunResult,
   type TestRunner,
@@ -84,6 +85,14 @@ describe("decideVerdict", () => {
     const v = decideVerdict("x.spec.ts", { kind: "flaky", passes: 2, runs: 3 }, { kind: "baseline-broken" });
     expect(v.trusted).toBe(false);
     expect(v.reasons.join(" ")).toMatch(/flaky/i);
+  });
+});
+
+describe("verdictToJson", () => {
+  it("flattens a verdict to a CI-consumable shape", () => {
+    const json = verdictToJson(decideVerdict("login.spec.ts", { kind: "stable-pass" }, { kind: "meaningful" }));
+    expect(json).toMatchObject({ spec: "login.spec.ts", trusted: true, stability: "stable-pass", mutation: "meaningful" });
+    expect(Array.isArray(json.reasons)).toBe(true);
   });
 });
 

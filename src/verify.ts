@@ -121,6 +121,25 @@ export async function verifySpec(
   return decideVerdict(spec, stability, mutationVerdict);
 }
 
+export interface VerdictJson {
+  spec: string;
+  trusted: boolean;
+  stability: string;
+  mutation: string;
+  reasons: string[];
+}
+
+/** Pure: a machine-readable shape for CI to consume. */
+export function verdictToJson(v: TestVerdict): VerdictJson {
+  return {
+    spec: v.spec,
+    trusted: v.trusted,
+    stability: v.stability.kind,
+    mutation: v.mutation.kind,
+    reasons: v.reasons,
+  };
+}
+
 export interface SpecPair {
   spec: string;
   mutation: string | null;
