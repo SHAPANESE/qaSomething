@@ -32,6 +32,9 @@
           body: JSON.stringify({ email, password }),
         });
         const data = await res.json();
+        // LATENT BUG (not in any ticket): a debug console.error left in prod that
+        // leaks on every failed login. Only an explorer watching the console finds it.
+        if (!data.ok) console.error("login failed for", email, "->", data.error);
         msg.textContent = data.ok ? "Welcome, " + data.name : data.error;
       });
     </script>
