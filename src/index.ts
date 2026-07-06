@@ -8,6 +8,7 @@ import { runAgent } from "./loop.js";
 import { createAnthropicModel } from "./model.js";
 import { fileTicketProvider, formatOracle, jiraProviderFromEnv } from "./oracle.js";
 import type { Step } from "./types.js";
+import { makeTriageRunner, triageSpec } from "./triage.js";
 import { playwrightRunner, verifyAll, type TestVerdict } from "./verify.js";
 import { isGitRepo, listChangedPaths } from "./workspace.js";
 
@@ -174,6 +175,38 @@ async function verifyAction(opts: VerifyOpts): Promise<void> {
   if (!ok) process.exitCode = 1;
 }
 
+interface TriageOpts {
+  repo: string;
+  spec?: string;
+  reruns?: number;
+  timeout?: number;
+  all?: boolean;
+}
+
+async function triageAction(opts: TriageOpts): Promise<void> {
+  const overrides: Partial<RunConfig> = {};
+  if (opts.reruns !== undefined) overrides.reruns = opts.reruns;
+  if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
+  const config = resolveConfig(path.resolve(opts.repo), overrides);
+
+  const specs =
+    opts.spec !== undefined
+      ? [path.join(config.repoPath, opts.spec)]
+      : (await discoverSpecs(config, opts.all !== false)).filter((s) => !s.endsWith(".mutation.spec.ts"));
+
+  if (specs.length === 0) {
+    console.log("No specs to triage.");
+    return;
+  }
+  const runner = makeTriageRunner(config.repoPath, config.commandTimeoutMs);
+  for (const spec of specs) {
+    const t = await triageSpec(spec, config.reruns, runner);
+    console.log(`\n${t.class.toUpperCase()}  ${t.spec}`);
+    console.log(`   evidence: ${t.evidence}`);
+    console.log(`   → ${t.recommendation}`);
+  }
+}
+
 const program = new Command();
 program.name("qa-agent").description("A senior-QA-minded agent that generates trustworthy Playwright tests.");
 
@@ -199,6 +232,16 @@ program
   .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
   .option("--all", "Verify all specs under the write dirs, not just git-changed ones")
   .action(verifyAction);
+
+program
+  .command("triage")
+  .description("Mission #6: classify why a failing test fails (flaky / locator-drift / regression)")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .option("-s, --spec <path>", "A single spec (repo-relative) to triage")
+  .option("--reruns <n>", "Runs used for flakiness detection", (v) => Number.parseInt(v, 10))
+  .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
+  .option("--all", "Triage all specs (default when --spec is omitted)")
+  .action(triageAction);
 
 program.parseAsync().catch((err: unknown) => {
   console.error(err);
