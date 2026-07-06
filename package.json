@@ -1,0 +1,31 @@
+{
+  "name": "qa-agent",
+  "version": "0.1.0",
+  "description": "A senior-QA-minded, SWE-style agent that generates trustworthy Playwright tests. Engine inspired by mini-swe-agent / Microsoft Webwright; the differentiator is the senior-QA criteria brain on top.",
+  "type": "module",
+  "bin": {
+    "qa-agent": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "packageManager": "pnpm@11.8.0",
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.8",
+    "ai": "^7.0.15",
+    "commander": "^15.0.0",
+    "execa": "^9.6.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
