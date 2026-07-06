@@ -46,11 +46,15 @@ Rules:
 
 ## What makes a test trustworthy (non-negotiable)
 
-- It must FAIL when the behavior is broken (a test that always passes is worse
-  than no test). Prove it: temporarily break the behavior via Playwright network
-  interception or by asserting against the broken state, confirm the test goes
-  red, then restore. Do this WITHOUT editing app source.
-- Assert on BEHAVIOR and acceptance criteria, not "the page loaded".
+- A test that always passes is worse than no test. For every real test
+  \`X.spec.ts\` you MUST also write a sibling \`X.mutation.spec.ts\`: the same
+  scenario and the same assertions, but with the behavior deliberately broken via
+  Playwright network interception (\`page.route\`, e.g. return a 500, an empty
+  body, or wrong data) — WITHOUT editing app source. The harness will run both:
+  the real test must PASS and the mutation test must FAIL. If your mutation test
+  still passes, your assertions are hollow and the test is REJECTED.
+- The harness also re-runs each test several times; a flaky test is rejected.
+- Assert on BEHAVIOR and the ticket's acceptance criteria, not "the page loaded".
 - Use semantic locators only: getByRole / getByLabel / getByText / data-testid.
   No xpath, no nth-child, no volatile text, no arbitrary sleeps (rely on Playwright
   auto-waiting).
@@ -70,14 +74,19 @@ ${criteriaManual}
 Begin when you receive the mission. Work in small, verifiable steps.`;
 }
 
-/** Wrap the user's mission with the concrete repo context for the first turn. */
-export function buildMissionPrompt(mission: string, config: RunConfig): string {
+/**
+ * Wrap the user's mission with the concrete repo context for the first turn.
+ * When an oracle (ticket) is provided, it is the source of truth for expected
+ * behavior and is injected here.
+ */
+export function buildMissionPrompt(mission: string, config: RunConfig, oracle?: string): string {
+  const oracleBlock = oracle ? `\n\n${oracle}\n` : "";
   return `MISSION: ${mission}
-
+${oracleBlock}
 Repository under test: ${config.repoPath}
 You may write to: ${config.allowedWriteDirs.map((d) => `${d}/`).join(", ")}
 
-Start by orienting yourself (read the repo, find how the app runs and what the
-relevant specs/acceptance criteria are), then prioritize by risk before writing
-any test.`;
+Start by orienting yourself (read the repo, find how the app runs${
+    oracle ? "" : " and what the relevant acceptance criteria are"
+  }), then prioritize by risk before writing any test.`;
 }

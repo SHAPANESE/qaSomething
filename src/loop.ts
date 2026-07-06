@@ -11,6 +11,8 @@ export interface RunAgentArgs {
   mission: string;
   criteriaManual: string;
   config: RunConfig;
+  /** Source-of-truth block (from a ticket) injected into the mission. */
+  oracle?: string;
   /** Optional hook fired after each step, for CLI progress rendering. */
   onStep?: (step: Step) => void;
 }
@@ -48,10 +50,10 @@ export function formatObservation(result: CommandResult, maxChars: number): stri
  * back — until the agent finishes or we hit the step ceiling.
  */
 export async function runAgent(args: RunAgentArgs): Promise<RunResult> {
-  const { model, mission, criteriaManual, config, onStep } = args;
+  const { model, mission, criteriaManual, config, oracle, onStep } = args;
 
   const system = buildSystemPrompt(criteriaManual, config);
-  const messages: Message[] = [{ role: "user", content: buildMissionPrompt(mission, config) }];
+  const messages: Message[] = [{ role: "user", content: buildMissionPrompt(mission, config, oracle) }];
   const steps: Step[] = [];
 
   const gitBacked = await isGitRepo(config.repoPath);

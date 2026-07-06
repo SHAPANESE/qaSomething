@@ -13,13 +13,22 @@ See the design in [`docs/superpowers/specs/2026-07-06-qa-agent-design.md`](docs/
 
 ## Status
 
-**Engine: built and tested.** Loop, shell guardrails, git-backed write-allowlist,
-model boundary, prompt, and CLI are in place (`pnpm test` → green, `pnpm typecheck`
-→ clean).
+**Engine + trust gates: built and tested** (`pnpm test` → 47 green, `pnpm typecheck`
+→ clean). In place: the loop, shell guardrails, git-backed write-allowlist, model
+boundary, prompt, CLI, the **oracle** (ticket-derived source of truth), and the
+harness-enforced **trust gates** — quarantine (re-run N times) + mutation polarity.
 
-**Not yet built** (needs two design decisions first — the oracle source and how the
-mutation check breaks behavior without touching app source): the automated
-mutation-check gate, the quarantine/self-reflection rerun, and the eval harness.
+**Oracle = tickets.** Expected behavior derives from a `--ticket`, not from
+observing the app (which would freeze current bugs as "correct").
+
+**Mutation check.** For each `X.spec.ts` the agent writes a sibling
+`X.mutation.spec.ts` that breaks behavior via `page.route` (no app-source edit).
+The harness runs both and requires real→PASS, mutation→FAIL; a hollow test is
+rejected.
+
+**Not yet built:** the eval harness (needs a fixture app with a planted bug),
+element caching (Stagehand-style, cost), and Missions #2–#6. A live end-to-end run
+also still needs `ANTHROPIC_API_KEY` and a target app + Playwright installed.
 
 ## Install
 
@@ -32,12 +41,16 @@ export ANTHROPIC_API_KEY=sk-...
 
 ```bash
 pnpm build
-node dist/index.js "Test the login flow" --repo /path/to/your/app
+node dist/index.js "Test the login flow" --repo /path/to/your/app --ticket ./PROJ-12.md
 # or, without building:
-pnpm dev "Test the login flow" --repo /path/to/your/app
+pnpm dev "Test the login flow" --repo /path/to/your/app --ticket ./PROJ-12.md
 ```
 
-Options: `--model <id>`, `--max-steps <n>`, `--timeout <ms>`, `--criteria <path>`.
+The `--ticket` file (markdown, text, or JSON) defines the expected behavior — the
+oracle. Without it the agent has no source of truth and is warned.
+
+Options: `--model <id>`, `--max-steps <n>`, `--timeout <ms>`, `--criteria <path>`,
+`--skip-verify` (skip the trust gates).
 
 ## Safety model
 

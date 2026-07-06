@@ -84,10 +84,12 @@ A single cycle, mini-swe-agent style:
 
 The core LLM vice: they write tests that **always pass** (navigate, check it loaded, green). A test that never fails is **worse than no test**. Foundations against this:
 
-1. **Proof the test catches bugs (mutation check).** Before accepting a generated test, the agent must prove it **fails when the behavior is broken**: break the feature on purpose (or mock the failure), confirm the test goes red, then restore. A test that doesn't go red on the failure is **rejected**. This is the differentiator.
+1. **Proof the test catches bugs (mutation check).** IMPLEMENTED as a harness gate (`src/verify.ts`), not a matter of trust. For every real `X.spec.ts` the agent also writes a sibling `X.mutation.spec.ts`: same scenario and assertions, but the behavior is deliberately broken via Playwright network interception (`page.route`) — **no app-source edit**, so it respects the read-only guardrail. The harness runs both and checks **polarity**: real → PASS, mutation → FAIL. If the mutation still passes, the assertions are hollow and the test is **rejected**. This is the differentiator.
+
+   **Oracle (resolved): expected behavior derives from a TICKET.** A `--ticket` reference (file now; Jira/GitHub provider later, `src/oracle.ts`) is injected as the source of truth. The agent tests against the ticket's acceptance criteria, NOT against the running app — which is what stops it from freezing current bugs as "correct". Without a ticket the CLI warns loudly.
 2. **Meaningful assertions, not smoke tests.** The prompt biases toward verifying *behavior / acceptance criteria*, not "the page rendered".
 3. **Semantic locators only.** `getByRole`, `getByLabel`, `getByText`, `data-testid`. No xpath, `nth-child`, or volatile text. Playwright auto-wait; **zero arbitrary `sleep`s.** (This is exactly the debt #2 would have to clean up — don't generate it.)
-4. **Quarantine.** A freshly generated test isn't marked "trusted" until it runs N times in a row without flaking. Prevents polluting the suite.
+4. **Quarantine.** IMPLEMENTED (`src/verify.ts`): a freshly generated test isn't marked "trusted" until it runs N times (`config.reruns`, default 3) without flaking. Prevents polluting the suite.
 5. **Evidence, not the agent's word.** What counts is the test file + a real run result. The agent's summary proves nothing; it may hallucinate that it tested something.
 
 ---

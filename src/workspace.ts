@@ -52,6 +52,17 @@ function parsePorcelain(output: string): GitChange[] {
 }
 
 /**
+ * List repo-relative paths that changed (tracked modifications + untracked new
+ * files) since the last commit. Used after a run to find the tests the agent
+ * produced so the harness can verify them.
+ */
+export async function listChangedPaths(cwd: string): Promise<string[]> {
+  const status = await execa("git", ["status", "--porcelain"], { cwd, reject: false });
+  if (status.exitCode !== 0) return [];
+  return parsePorcelain(String(status.stdout)).map((c) => c.path);
+}
+
+/**
  * Revert every change that falls outside `allowedDirs`. Returns the list of
  * paths that were reverted so the caller can surface the guardrail action back
  * to the agent (it needs to know its edit was undone and why).

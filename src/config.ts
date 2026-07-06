@@ -16,6 +16,8 @@ export interface RunConfig {
   modelId: string;
   /** Command output longer than this (chars) is truncated before feeding back. */
   maxOutputChars: number;
+  /** Quarantine: how many times each produced test is re-run to prove non-flaky. */
+  reruns: number;
 }
 
 export const DEFAULT_CONFIG: Omit<RunConfig, "repoPath"> = {
@@ -24,6 +26,7 @@ export const DEFAULT_CONFIG: Omit<RunConfig, "repoPath"> = {
   commandTimeoutMs: 120_000,
   modelId: "claude-opus-4-8",
   maxOutputChars: 20_000,
+  reruns: 3,
 };
 
 export function resolveConfig(repoPath: string, overrides: Partial<RunConfig> = {}): RunConfig {
