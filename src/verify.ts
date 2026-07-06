@@ -156,11 +156,15 @@ export async function verifyAll(
   return verdicts;
 }
 
-/** Default runner: `npx playwright test <spec>` in the repo under test. */
+/**
+ * Default runner: `npx playwright test <spec>` in the repo under test, invoked
+ * through `bash -c` so PATH resolution works cross-platform (on Windows a bare
+ * `npx` spawn misses `npx.cmd`).
+ */
 export function playwrightRunner(repoPath: string, timeoutMs: number): TestRunner {
   return async (specFile) => {
-    const rel = path.relative(repoPath, specFile) || specFile;
-    const res = await execa("npx", ["playwright", "test", rel, "--reporter=line"], {
+    const rel = path.relative(repoPath, specFile).split(path.sep).join("/") || specFile;
+    const res = await execa("bash", ["-c", `npx playwright test "${rel}" --reporter=line`], {
       cwd: repoPath,
       timeout: timeoutMs,
       reject: false,

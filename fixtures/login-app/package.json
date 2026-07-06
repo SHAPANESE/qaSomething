@@ -1,0 +1,14 @@
+{
+  "name": "login-app-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fixture app under test: a login flow with a planted bug (no empty-email validation).",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

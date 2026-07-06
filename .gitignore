@@ -5,3 +5,6 @@ dist/
 .env.local
 .qa-agent/
 coverage/
+test-results/
+playwright-report/
+.last-run.json

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in</title>
+  </head>
+  <body>
+    <main>
+      <h1>Sign in</h1>
+      <form id="login" novalidate>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" />
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" />
+        <button type="submit">Sign in</button>
+      </form>
+      <p id="message" role="status" aria-live="polite"></p>
+    </main>
+    <script>
+      const form = document.getElementById("login");
+      const msg = document.getElementById("message");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        msg.textContent = "";
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+        // PLANTED BUG (ticket AC3): no empty-email validation here either.
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        msg.textContent = data.ok ? "Welcome, " + data.name : data.error;
+      });
+    </script>
+  </body>
+</html>
