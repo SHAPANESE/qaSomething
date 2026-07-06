@@ -23,6 +23,30 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
   return res.exitCode === 0 && String(res.stdout).trim() === "true";
 }
 
+/**
+ * The path of `cwd` relative to the git root (e.g. "fixtures/login-app/", or ""
+ * when cwd IS the root). `git status --porcelain` reports paths from the ROOT
+ * regardless of cwd, so we need this to translate them back to repo-relative.
+ */
+export async function gitPrefix(cwd: string): Promise<string> {
+  const res = await execa("git", ["rev-parse", "--show-prefix"], { cwd, reject: false });
+  if (res.exitCode !== 0) return "";
+  return String(res.stdout).trim();
+}
+
+/**
+ * Pure: given a repo-root-relative git path and the cwd's prefix, return the
+ * path relative to cwd — or null if it falls outside cwd's subtree (elsewhere in
+ * the monorepo, which the guard must leave untouched).
+ */
+export function underPrefix(gitPath: string, prefix: string): string | null {
+  const p = gitPath.split("\\").join("/");
+  const pre = prefix.split("\\").join("/");
+  if (pre === "") return p;
+  if (!p.startsWith(pre)) return null;
+  return p.slice(pre.length);
+}
+
 function isAllowed(relPath: string, allowedDirs: string[]): boolean {
   const normalized = relPath.split(path.sep).join("/");
   return allowedDirs.some(
@@ -59,7 +83,10 @@ function parsePorcelain(output: string): GitChange[] {
 export async function listChangedPaths(cwd: string): Promise<string[]> {
   const status = await execa("git", ["status", "--porcelain"], { cwd, reject: false });
   if (status.exitCode !== 0) return [];
-  return parsePorcelain(String(status.stdout)).map((c) => c.path);
+  const prefix = await gitPrefix(cwd);
+  return parsePorcelain(String(status.stdout))
+    .map((c) => underPrefix(c.path, prefix))
+    .filter((p): p is string => p !== null);
 }
 
 /**
@@ -74,12 +101,19 @@ export async function revertDisallowedChanges(
   const status = await execa("git", ["status", "--porcelain"], { cwd, reject: false });
   if (status.exitCode !== 0) return [];
 
-  const changes = parsePorcelain(String(status.stdout));
-  const disallowed = changes.filter((c) => !isAllowed(c.path, allowedDirs));
+  const prefix = await gitPrefix(cwd);
+  const disallowed: { rel: string; untracked: boolean }[] = [];
+  for (const change of parsePorcelain(String(status.stdout))) {
+    const rel = underPrefix(change.path, prefix);
+    // Skip changes outside cwd's subtree — never touch the rest of a monorepo.
+    if (rel === null) continue;
+    if (isAllowed(rel, allowedDirs)) continue;
+    disallowed.push({ rel, untracked: change.untracked });
+  }
   if (disallowed.length === 0) return [];
 
-  const untracked = disallowed.filter((c) => c.untracked).map((c) => c.path);
-  const tracked = disallowed.filter((c) => !c.untracked).map((c) => c.path);
+  const untracked = disallowed.filter((c) => c.untracked).map((c) => c.rel);
+  const tracked = disallowed.filter((c) => !c.untracked).map((c) => c.rel);
 
   if (tracked.length > 0) {
     await execa("git", ["checkout", "--", ...tracked], { cwd, reject: false });
@@ -88,5 +122,5 @@ export async function revertDisallowedChanges(
     await rm(path.join(cwd, file), { force: true, recursive: true });
   }
 
-  return disallowed.map((c) => c.path);
+  return disallowed.map((c) => c.rel);
 }
