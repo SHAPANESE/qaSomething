@@ -157,17 +157,22 @@ export async function verifyAll(
 }
 
 /**
- * Default runner: `npx playwright test <spec>` in the repo under test, invoked
- * through `bash -c` so PATH resolution works cross-platform (on Windows a bare
- * `npx` spawn misses `npx.cmd`).
+ * Default runner: run the repo's local Playwright CLI as `playwright test <spec>`.
+ *
+ * The spec path is passed as a SEPARATE ARGV, never interpolated into a shell
+ * string — a test filename with shell metacharacters (from an untrusted repo)
+ * cannot inject commands. `preferLocal` resolves the repo's own Playwright binary
+ * and handles Windows `.cmd` resolution, so no shell is needed at all.
  */
 export function playwrightRunner(repoPath: string, timeoutMs: number): TestRunner {
   return async (specFile) => {
     const rel = path.relative(repoPath, specFile).split(path.sep).join("/") || specFile;
-    const res = await execa("bash", ["-c", `npx playwright test "${rel}" --reporter=line`], {
+    const res = await execa("playwright", ["test", rel, "--reporter=line"], {
       cwd: repoPath,
       timeout: timeoutMs,
       reject: false,
+      preferLocal: true,
+      localDir: repoPath,
     });
     const output = `${res.stdout ?? ""}\n${res.stderr ?? ""}`;
     return interpretRun(typeof res.exitCode === "number" ? res.exitCode : null, output);
