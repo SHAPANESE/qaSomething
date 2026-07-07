@@ -4,7 +4,7 @@ import { parseAction } from "./parse.js";
 import { buildMissionPrompt, buildSystemPrompt, type EnvInfo } from "./prompt.js";
 import { runCommand } from "./shell.js";
 import type { CommandResult, Message, RunResult, Step } from "./types.js";
-import { isGitRepo, revertDisallowedChanges } from "./workspace.js";
+import { isGitRepo, listChangedPaths, revertDisallowedChanges } from "./workspace.js";
 
 export interface RunAgentArgs {
   model: Model;
@@ -63,6 +63,11 @@ export async function runAgent(args: RunAgentArgs): Promise<RunResult> {
   const steps: Step[] = [];
 
   const gitBacked = await isGitRepo(config.repoPath);
+  // Snapshot files already dirty before the agent runs — the user's pre-existing
+  // uncommitted work, which the write-guard must never revert.
+  const preexistingDirty: ReadonlySet<string> = gitBacked
+    ? new Set(await listChangedPaths(config.repoPath))
+    : new Set();
   if (!gitBacked) {
     messages.push({
       role: "user",
@@ -101,7 +106,11 @@ export async function runAgent(args: RunAgentArgs): Promise<RunResult> {
       timeoutMs: config.commandTimeoutMs,
     });
     if (gitBacked && !result.blocked) {
-      result.revertedPaths = await revertDisallowedChanges(config.repoPath, config.allowedWriteDirs);
+      result.revertedPaths = await revertDisallowedChanges(
+        config.repoPath,
+        config.allowedWriteDirs,
+        preexistingDirty,
+      );
     }
 
     const step: Step = { index, assistant, action, result };

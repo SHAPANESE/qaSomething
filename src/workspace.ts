@@ -91,8 +91,17 @@ export async function listChangedPaths(cwd: string): Promise<string[]> {
  * Revert every change that falls outside `allowedDirs`. Returns the list of
  * paths that were reverted so the caller can surface the guardrail action back
  * to the agent (it needs to know its edit was undone and why).
+ *
+ * `protectedPaths` are files that were ALREADY dirty before the run started —
+ * the user's pre-existing uncommitted work. The guard must never touch them:
+ * it undoes the AGENT's out-of-bounds writes, not the user's. (A real run
+ * exposed that reverting pre-existing dirt would wipe uncommitted work.)
  */
-export async function revertDisallowedChanges(cwd: string, allowedDirs: string[]): Promise<string[]> {
+export async function revertDisallowedChanges(
+  cwd: string,
+  allowedDirs: string[],
+  protectedPaths: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
   const status = await execa("git", ["status", "--porcelain"], { cwd, reject: false });
   if (status.exitCode !== 0) return [];
 
@@ -103,6 +112,8 @@ export async function revertDisallowedChanges(cwd: string, allowedDirs: string[]
     // Skip changes outside cwd's subtree — never touch the rest of a monorepo.
     if (rel === null) continue;
     if (isAllowed(rel, allowedDirs)) continue;
+    // Skip the user's pre-existing uncommitted work.
+    if (protectedPaths.has(rel)) continue;
     disallowed.push({ rel, untracked: change.untracked });
   }
   if (disallowed.length === 0) return [];
