@@ -48,11 +48,18 @@ Rules:
 
 - A test that always passes is worse than no test. For every real test
   \`X.spec.ts\` you MUST also write a sibling \`X.mutation.spec.ts\`: the same
-  scenario and the same assertions, but with the behavior deliberately broken via
-  Playwright network interception (\`page.route\`, e.g. return a 500, an empty
-  body, or wrong data) — WITHOUT editing app source. The harness will run both:
-  the real test must PASS and the mutation test must FAIL. If your mutation test
-  still passes, your assertions are hollow and the test is REJECTED.
+  scenario and the same assertions, but with the behavior deliberately broken —
+  WITHOUT editing app source. Pick the break by where the behavior lives:
+  - NETWORK-backed behavior: intercept and corrupt responses with \`page.route\`
+    (return a 500, an empty body, or wrong data).
+  - CLIENT-ONLY behavior (no meaningful network): freeze interactivity. BEFORE
+    navigating, call page.addInitScript with a script that installs capture-phase
+    listeners which stopImmediatePropagation and preventDefault on the user events
+    (click, submit, change, input, keydown, keyup, keypress, pointerdown/up,
+    mousedown/up). Interactions no longer reach the app, so a behavioral assertion
+    fails while a hollow "the page rendered" assertion still passes.
+  The harness runs both: the real test must PASS and the mutation test must FAIL.
+  If your mutation test still passes, your assertions are hollow → test REJECTED.
 - The harness also re-runs each test several times; a flaky test is rejected.
 - Assert on BEHAVIOR and the ticket's acceptance criteria, not "the page loaded".
 - Use semantic locators only: getByRole / getByLabel / getByText / data-testid.
