@@ -75,4 +75,18 @@ describe("agent machinery (integration)", () => {
     expect(serverText).not.toContain("injected"); // reverted despite the subdir prefix
     expect(result.steps.some((s) => s.result?.revertedPaths.includes("server.mjs"))).toBe(true);
   }, 60_000);
+
+  it("preserves the user's pre-existing uncommitted work", async () => {
+    const repo = await setupRepo(null);
+    // Uncommitted work-in-progress outside the allowed dirs, present BEFORE the run.
+    await writeFile(path.join(repo, "notes.md"), "my precious WIP\n");
+
+    const { result, serverText } = await runScenario(repo);
+
+    expect(result.finished).toBe(true);
+    expect(serverText).not.toContain("injected"); // the agent's edit is still reverted
+    // ...but the user's pre-existing file is untouched (NOT deleted by the guard):
+    expect(existsSync(path.join(repo, "notes.md"))).toBe(true);
+    expect(await readFile(path.join(repo, "notes.md"), "utf8")).toContain("my precious WIP");
+  }, 60_000);
 });

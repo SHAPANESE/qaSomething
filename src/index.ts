@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveConfig, type RunConfig } from "./config.js";
 import { runAgent } from "./loop.js";
-import { createAnthropicModel } from "./model.js";
+import { claudeCliModel, createAnthropicModel } from "./model.js";
 import { fileTicketProvider, formatOracle, jiraProviderFromEnv } from "./oracle.js";
 import { loadProjectConfig, type ProjectConfig } from "./projectConfig.js";
 import type { EnvInfo } from "./prompt.js";
@@ -133,11 +133,12 @@ interface RunOpts {
   timeout?: number;
   skipVerify?: boolean;
   repair?: boolean;
+  subscription?: boolean;
 }
 
 async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
-  if (!process.env["ANTHROPIC_API_KEY"]) {
-    console.error("Error: ANTHROPIC_API_KEY is not set. Export it before running.");
+  if (opts.subscription !== true && !process.env["ANTHROPIC_API_KEY"]) {
+    console.error("Error: ANTHROPIC_API_KEY is not set. Export it, or use --subscription (Claude Code CLI).");
     process.exitCode = 1;
     return;
   }
@@ -148,7 +149,7 @@ async function runAgentAction(mission: string, opts: RunOpts): Promise<void> {
   if (opts.maxSteps !== undefined) overrides.maxSteps = opts.maxSteps;
   if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
   const { config, project } = await buildConfig(path.resolve(opts.repo), overrides);
-  const model = createAnthropicModel(config.modelId);
+  const model = opts.subscription === true ? claudeCliModel() : createAnthropicModel(config.modelId);
   const env = envFrom(project);
 
   let oracle: string | undefined;
@@ -263,6 +264,7 @@ program
   .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
   .option("--skip-verify", "Skip the post-run trust gates")
   .option("--repair", "Mission #2: repair failing tests (self-healing) instead of generating")
+  .option("--subscription", "Use the Claude Code CLI (subscription) instead of ANTHROPIC_API_KEY")
   .action(runAgentAction);
 
 program
