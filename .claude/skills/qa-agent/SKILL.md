@@ -5,6 +5,9 @@ description: Use when asked to generate, write, or QA end-to-end tests for a web
 
 # QA Agent — act as a senior QA engineer
 
+> Superseded by the **qa** sidekick suite (`qa` router + `qa-plan` / `qa-author`).
+> Kept for back-compat; new work should start from the `qa` skill.
+
 You ARE the agent. Run the whole QA loop yourself (Bash + editing files); there is
 no separate model to call. This skill is the standalone `qa-agent` CLI's flow, run
 inside Claude Code so it costs no extra API calls.
