@@ -27,6 +27,7 @@
 ## File Structure
 
 **New (Plan 1):**
+
 - `src/casebook/caseId.ts` — pure: make/parse/next stable case IDs. + `caseId.test.ts`
 - `src/casebook/cases.ts` — case model (types + zod), parse/serialize `cases.md`. + `cases.test.ts`
 - `src/casebook/state.ts` — cycle-state model + machine, parse/serialize `state.json`. + `state.test.ts`
@@ -37,11 +38,13 @@
 - `.claude/skills/qa-author/SKILL.md` — authoring stage, adapted from the current `qa-agent` skill to read `cases.md`.
 
 **Modified:**
+
 - `README.md` — document the sidekick + casebook.
 - `CHANGELOG.md` — add the entries.
 - `.claude/skills/qa-agent/SKILL.md` — add a one-line pointer that it is superseded by the `qa` suite (kept for back-compat).
 
 **Interface summary (locked here, consumed by later tasks and Plan 2):**
+
 ```ts
 // caseId.ts
 makeCaseId(ticketId: string, n: number): string
@@ -79,16 +82,19 @@ writePlan(repo, md): Promise<void>;  appendGap(repo, line): Promise<void>
 ### Task 1: Case IDs (`src/casebook/caseId.ts`)
 
 **Files:**
+
 - Create: `src/casebook/caseId.ts`
 - Test: `src/casebook/caseId.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `makeCaseId(ticketId, n)`, `parseCaseId(id)`, `nextCaseNumber(existing, ticketId)` (see interface summary).
 
 - [ ] **Step 1: Write the failing test**
 
 Create `src/casebook/caseId.test.ts`:
+
 ```ts
 import { describe, expect, it } from "vitest";
 import { makeCaseId, nextCaseNumber, parseCaseId } from "./caseId.js";
@@ -132,6 +138,7 @@ Expected: FAIL — cannot find module `./caseId.js`.
 - [ ] **Step 3: Write minimal implementation**
 
 Create `src/casebook/caseId.ts`:
+
 ```ts
 /**
  * Stable test-case IDs: `TC-<TICKET>-NN`. One id threads a case through
@@ -192,16 +199,19 @@ git commit -m "feat(casebook): stable TC-<TICKET>-NN case ids"
 ### Task 2: Case model + `cases.md` parse/serialize (`src/casebook/cases.ts`)
 
 **Files:**
+
 - Create: `src/casebook/cases.ts`
 - Test: `src/casebook/cases.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing (self-contained; ids are plain strings validated by regex).
 - Produces: `ScenarioCategory`, `CaseStatus`, `CasePriority`, `TestCase`, `TestCaseSchema`, `parseCases(md)`, `serializeCases(cases)`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `src/casebook/cases.test.ts`:
+
 ```ts
 import { describe, expect, it } from "vitest";
 import { parseCases, serializeCases, type TestCase } from "./cases.js";
@@ -258,7 +268,17 @@ describe("serializeCases / parseCases", () => {
   });
 
   it("rejects an invalid category via the schema", () => {
-    const md = ["---", "id: TC-X-01", "ac: x", "priority: low", "category: bogus", "status: planned", "---", "body", ""].join("\n");
+    const md = [
+      "---",
+      "id: TC-X-01",
+      "ac: x",
+      "priority: low",
+      "category: bogus",
+      "status: planned",
+      "---",
+      "body",
+      "",
+    ].join("\n");
     expect(() => parseCases(md)).toThrow();
   });
 
@@ -276,6 +296,7 @@ Expected: FAIL — cannot find module `./cases.js`.
 - [ ] **Step 3: Write minimal implementation**
 
 Create `src/casebook/cases.ts`:
+
 ```ts
 import { z } from "zod";
 
@@ -395,16 +416,19 @@ git commit -m "feat(casebook): case model + cases.md parse/serialize with scenar
 ### Task 3: Cycle-state machine (`src/casebook/state.ts`)
 
 **Files:**
+
 - Create: `src/casebook/state.ts`
 - Test: `src/casebook/state.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `CyclePhase`, `CYCLE_PHASES`, `TicketState`, `CasebookState`, `emptyState()`, `parseState(raw)`, `serializeState(state)`, `nextPhase(phase)`, `setPhase(state, ticketId, phase, updated)`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `src/casebook/state.test.ts`:
+
 ```ts
 import { describe, expect, it } from "vitest";
 import { emptyState, nextPhase, parseState, serializeState, setPhase } from "./state.js";
@@ -436,7 +460,10 @@ describe("parseState / serializeState", () => {
     expect(parseState(serializeState(s))).toEqual(s);
   });
   it("rejects an unknown phase", () => {
-    const raw = JSON.stringify({ version: 1, tickets: { X: { ticketId: "X", phase: "nope", updated: "t" } } });
+    const raw = JSON.stringify({
+      version: 1,
+      tickets: { X: { ticketId: "X", phase: "nope", updated: "t" } },
+    });
     expect(() => parseState(raw)).toThrow();
   });
 });
@@ -450,6 +477,7 @@ Expected: FAIL — cannot find module `./state.js`.
 - [ ] **Step 3: Write minimal implementation**
 
 Create `src/casebook/state.ts`:
+
 ```ts
 import { z } from "zod";
 
@@ -528,22 +556,33 @@ git commit -m "feat(casebook): cycle-state machine (planned→…→reported)"
 ### Task 4: Casebook I/O layer (`src/casebook/store.ts`)
 
 **Files:**
+
 - Create: `src/casebook/store.ts`
 - Test: `src/casebook/store.test.ts`
 
 **Interfaces:**
+
 - Consumes: `parseCases`/`serializeCases`/`TestCase` from `./cases.js`; `emptyState`/`parseState`/`serializeState`/`CasebookState` from `./state.js`.
 - Produces: `CASEBOOK_DIR`, `casebookPaths(repo)`, `ensureCasebook(repo)`, `readCases`/`writeCases`, `readState`/`writeState`, `writePlan`, `appendGap`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `src/casebook/store.test.ts`:
+
 ```ts
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendGap, casebookPaths, readCases, readState, writeCases, writePlan, writeState } from "./store.js";
+import {
+  appendGap,
+  casebookPaths,
+  readCases,
+  readState,
+  writeCases,
+  writePlan,
+  writeState,
+} from "./store.js";
 import { emptyState, setPhase } from "./state.js";
 import type { TestCase } from "./cases.js";
 
@@ -607,6 +646,7 @@ Expected: FAIL — cannot find module `./store.js`.
 - [ ] **Step 3: Write minimal implementation**
 
 Create `src/casebook/store.ts`:
+
 ```ts
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -709,16 +749,19 @@ git commit -m "feat(casebook): filesystem I/O for the .qa-agent workspace"
 The planning/discovery stage: ticket → risk-ranked, criterio-audited cases + gaps. This is the largest net-new value. It is a Claude Code skill (a prompt artifact); its "test" is a dogfood run whose output is checked mechanically by `scripts/check-casebook.mts` using the casebook module — evidence, not the model's word.
 
 **Files:**
+
 - Create: `.claude/skills/qa-plan/SKILL.md`
 - Create: `scripts/check-casebook.mts`
 
 **Interfaces:**
+
 - Consumes: `readCases`, `casebookPaths` from `src/casebook/store.js`; `SCENARIO_CATEGORIES` from `src/casebook/cases.js`.
 - Produces: a validated `.qa-agent/` (plan.md, cases.md, gaps.md, state.json) for the fixture.
 
 - [ ] **Step 1: Write the validator (the gate for this task)**
 
 Create `scripts/check-casebook.mts`:
+
 ```ts
 /**
  * Validate a produced casebook: it must parse, and it must show real criterio —
@@ -746,7 +789,8 @@ const categories = new Set(cases.map((c) => c.category));
 if (categories.size < 2) problems.push(`only one scenario category present (${[...categories].join(", ")})`);
 
 const nonHappy = cases.filter((c) => c.category !== "happy");
-if (nonHappy.length === 0) problems.push("no non-happy cases — criterio not exercised (negatives/boundaries?)");
+if (nonHappy.length === 0)
+  problems.push("no non-happy cases — criterio not exercised (negatives/boundaries?)");
 
 if (!existsSync(paths.gaps)) problems.push("no gaps.md — spec was not questioned");
 
@@ -761,6 +805,7 @@ console.log(`✔ casebook check passed: ${cases.length} cases, categories: ${[..
 - [ ] **Step 2: Author the `qa-plan` skill**
 
 Create `.claude/skills/qa-plan/SKILL.md`:
+
 ```markdown
 ---
 name: qa-plan
@@ -769,7 +814,7 @@ description: Use to turn a ticket / acceptance criteria into a risk-ranked, crit
 
 # qa-plan — design the tests before writing them
 
-You ARE a senior QA engineer doing the *thinking* stage. Output is reviewable
+You ARE a senior QA engineer doing the _thinking_ stage. Output is reviewable
 artifacts in the `.qa-agent/` casebook, not code. Do NOT write Playwright tests
 here — that is `qa-author`.
 
@@ -803,14 +848,17 @@ Write these files under `<repo>/.qa-agent/` (create the dir if missing):
 - **plan.md** — the risk ranking: what to test, what was discarded and why.
 - **cases.md** — one block per case, in this exact format (parsed by the
   casebook module, so match it):
-  ```
-  ---
-  id: TC-<TICKET>-NN
-  ac: "<which acceptance criterion>"
-  priority: high|medium|low
-  category: happy|negative|boundary|state|concurrency|idempotency|data-integrity|interruption|security|a11y|performance|compatibility|i18n
-  status: planned
-  ---
+```
+
+---
+
+id: TC-<TICKET>-NN
+ac: "<which acceptance criterion>"
+priority: high|medium|low
+category: happy|negative|boundary|state|concurrency|idempotency|data-integrity|interruption|security|a11y|performance|compatibility|i18n
+status: planned
+---
+
   <one or two sentences: the scenario and its expected result>
   ```
   Number cases sequentially per ticket (TC-<TICKET>-01, -02, …). Each prioritized
@@ -829,7 +877,8 @@ Write these files under `<repo>/.qa-agent/` (create the dir if missing):
   high-risk items, each tagged with its category — the coverage is auditable.
 - gaps.md lists what the ticket leaves undefined.
 - You stated what you did NOT plan to test and why.
-```
+
+````
 
 - [ ] **Step 3: Dogfood on the fixture and gate with the validator**
 
@@ -845,7 +894,7 @@ If it fails, fix the produced casebook (add the missing non-happy cases / gaps.m
 ```bash
 git add .claude/skills/qa-plan/SKILL.md scripts/check-casebook.mts fixtures/login-app/.qa-agent
 git commit -m "feat(qa-plan): criterio-driven planning stage + auditable casebook check"
-```
+````
 
 ---
 
@@ -854,15 +903,18 @@ git commit -m "feat(qa-plan): criterio-driven planning stage + auditable caseboo
 The thin router: reads `state.json`, runs the guided flow with approval checkpoints, or routes straight to one stage à la carte.
 
 **Files:**
+
 - Create: `.claude/skills/qa/SKILL.md`
 
 **Interfaces:**
+
 - Consumes: the other stage skills by name (`qa-plan`, `qa-author`); the casebook `state.json`.
 - Produces: nothing on disk itself (delegates to stages).
 
 - [ ] **Step 1: Author the router skill**
 
 Create `.claude/skills/qa/SKILL.md`:
+
 ```markdown
 ---
 name: qa
@@ -883,8 +935,8 @@ context. Read `<repo>/.qa-agent/state.json` first to learn where each ticket is.
   2. `qa-author` → present the specs + trust-gate verdicts → **checkpoint**
   3. `qa-run` / `qa-triage` / `qa-bug` / `qa-report` (Plan 2; until then, say the
      stage is not built yet and stop cleanly).
-  Advance the ticket's phase in state.json after each completed stage
-  (planned → authored → run → triaged → reported).
+     Advance the ticket's phase in state.json after each completed stage
+     (planned → authored → run → triaged → reported).
 
 - **À la carte:** if the user asks for one thing ("plan cases for X", "why is this
   test flaky?"), route directly to that stage skill. The stage finds its context
@@ -892,14 +944,14 @@ context. Read `<repo>/.qa-agent/state.json` first to learn where each ticket is.
 
 ## Routing table
 
-| User intent | Stage |
-| --- | --- |
-| plan / analyze ticket / what to test | `qa-plan` |
-| write / generate tests from the plan | `qa-author` |
-| run tests / coverage vs plan | `qa-run` *(Plan 2)* |
-| why did this fail / flaky | `qa-triage` *(Plan 2)* |
-| file / report a bug | `qa-bug` *(Plan 2)* |
-| sign-off / what's covered | `qa-report` *(Plan 2)* |
+| User intent                          | Stage                  |
+| ------------------------------------ | ---------------------- |
+| plan / analyze ticket / what to test | `qa-plan`              |
+| write / generate tests from the plan | `qa-author`            |
+| run tests / coverage vs plan         | `qa-run` _(Plan 2)_    |
+| why did this fail / flaky            | `qa-triage` _(Plan 2)_ |
+| file / report a bug                  | `qa-bug` _(Plan 2)_    |
+| sign-off / what's covered            | `qa-report` _(Plan 2)_ |
 
 ## Rules
 
@@ -928,16 +980,19 @@ git commit -m "feat(qa): router skill — guided flow + à la carte over the cas
 Repurpose the current `qa-agent` skill into `qa-author`: it reads `cases.md`, authors a spec per case, tags each spec with its `case-id`, and updates that case's `status` to `authored` (and `spec` path). Keeps every existing non-negotiable (mutation proof, semantic locators, read-only app, ticket oracle, trust gates).
 
 **Files:**
+
 - Create: `.claude/skills/qa-author/SKILL.md`
 - Modify: `.claude/skills/qa-agent/SKILL.md` (add a supersede pointer)
 
 **Interfaces:**
+
 - Consumes: `cases.md` (each `TestCase`), the ticket oracle, the engine `verify` CLI.
 - Produces: `tests/<name>.spec.ts` (+ `.mutation.spec.ts`) each tagged with its case-id; updated `cases.md` (`status: authored`, `spec: <path>`).
 
 - [ ] **Step 1: Author the `qa-author` skill**
 
 Create `.claude/skills/qa-author/SKILL.md`:
+
 ```markdown
 ---
 name: qa-author
@@ -986,8 +1041,8 @@ authoring without cases means no criterio and no traceability.
 - [ ] **Step 2: Add the supersede pointer to the old skill**
 
 Edit `.claude/skills/qa-agent/SKILL.md` — insert directly under the H1 title line `# QA Agent — act as a senior QA engineer`:
-```markdown
 
+```markdown
 > Superseded by the **qa** sidekick suite (`qa` router + `qa-plan` / `qa-author`).
 > Kept for back-compat; new work should start from the `qa` skill.
 ```
@@ -1019,12 +1074,14 @@ git commit -m "feat(qa-author): author specs from the casebook, tagged + status-
 Wire the story together in the README/CHANGELOG and prove the front-of-cycle slice end to end on the fixture.
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `CHANGELOG.md`
 
 - [ ] **Step 1: Full-slice dogfood (plan → author → verify) on the fixture**
 
 Acting via the `qa` router on `fixtures/login-app` + `tickets/PROJ-42.md`:
+
 1. `qa-plan` → `.qa-agent/` produced; `pnpm tsx scripts/check-casebook.mts fixtures/login-app` → ✔.
 2. `qa-author` → specs authored from the planned cases, cases.md statuses updated.
 3. Trust gates: `node dist/index.js verify --repo fixtures/login-app --all --reruns 3` (build first: `pnpm build`).
@@ -1033,6 +1090,7 @@ Acting via the `qa` router on `fixtures/login-app` + `tickets/PROJ-42.md`:
 - [ ] **Step 2: Update the README**
 
 In `README.md`, add a section after "What it does" describing the sidekick:
+
 ```markdown
 ## The QA sidekick (stages + casebook)
 
@@ -1040,26 +1098,28 @@ Beyond one-shot authoring, `qa-agent` works across the QA cycle from inside Clau
 Code via a suite of stage-skills coordinated by a `qa` router, all sharing a
 **casebook** — `.qa-agent/` in the repo under test:
 
-| File | Holds |
-| --- | --- |
-| `plan.md` | risk-ranked plan: what to test, what was discarded, why |
-| `cases.md` | test cases with a stable id, AC, priority, and **scenario category** (auditable criterio) |
-| `gaps.md` | spec ambiguities / undefined edge cases (findings before any test) |
-| `state.json` | each ticket's position in the cycle (planned → … → reported) |
+| File         | Holds                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| `plan.md`    | risk-ranked plan: what to test, what was discarded, why                                   |
+| `cases.md`   | test cases with a stable id, AC, priority, and **scenario category** (auditable criterio) |
+| `gaps.md`    | spec ambiguities / undefined edge cases (findings before any test)                        |
+| `state.json` | each ticket's position in the cycle (planned → … → reported)                              |
 
 A stable case id (`TC-<TICKET>-NN`) threads requirement → case → spec → run → bug —
 a traceability matrix. Stages are stateless; the casebook holds state, so you can
 run the guided flow or jump to any stage à la carte.
 
 Stages: **qa-plan** (design + criterio audit) · **qa-author** (write trustworthy
-specs) · qa-run · qa-triage · qa-bug · qa-report *(the last four are Plan 2)*.
+specs) · qa-run · qa-triage · qa-bug · qa-report _(the last four are Plan 2)_.
 ```
 
 - [ ] **Step 3: Update the CHANGELOG**
 
 In `CHANGELOG.md`, under the top/Unreleased section, add:
+
 ```markdown
 ### Added
+
 - QA sidekick foundation: `.qa-agent/` casebook module (`src/casebook/`) with a
   stable case-id traceability backbone, `cases.md`/`state.json` parse-serialize,
   and I/O layer.
@@ -1083,6 +1143,7 @@ git commit -m "docs: document the QA sidekick + casebook foundation"
 ## Self-Review
 
 **Spec coverage (against `2026-07-13-qa-sidekick-design.md`):**
+
 - §2 architecture (suite + router + shared workspace) → Tasks 5–7 (skills) over Tasks 1–4 (casebook). ✓
 - §3 workspace + traceability (case-id, `.qa-agent/` layout, format rule) → Tasks 1–4; layout in `casebookPaths`. ✓
 - §4 criterio as engine (auditable scenario coverage, gaps.md first-class) → Task 5 skill + `check-casebook.mts` gate. ✓

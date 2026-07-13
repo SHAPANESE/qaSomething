@@ -8,3 +8,6 @@ coverage/
 test-results/
 playwright-report/
 .last-run.json
+
+# subagent-driven-development scratch
+.superpowers/

@@ -9,7 +9,7 @@
 ## 1. Vision
 
 A **QA sidekick that lives inside Claude Code** and works with you across the
-*entire* QA cycle — planning, authoring, execution, triage, bug reporting, and
+_entire_ QA cycle — planning, authoring, execution, triage, bug reporting, and
 sign-off — either as one **guided journey per ticket** or **à la carte** (jump to any
 single stage). It reuses the existing TypeScript engine (`verify`, `triage`,
 `mutate`, `oracle`, `loop`, `explore`) as deterministic "hands"; the new layer is the
@@ -22,7 +22,7 @@ judgment **auditable**, not a matter of trust.
 ### Non-goals (YAGNI)
 
 - No web UI, no standalone TUI, no Slack/Jira bot as the interaction surface — the
-  surface is Claude Code. (Jira/Confluence remain *data sources/sinks* via MCP.)
+  surface is Claude Code. (Jira/Confluence remain _data sources/sinks_ via MCP.)
 - No new test runner or assertion library — Playwright + the existing gates stay.
 - No multi-repo orchestration. One repo under test per workspace.
 - No CI product; we only keep emitting JSON so an existing CI can gate on it.
@@ -68,7 +68,7 @@ Requirement (ticket AC) → Case TC-<TICKET>-NN → spec file → run result →
 
 This is a **requirements traceability matrix**: from any requirement you can see which
 case covers it, whether it passed, and whether it produced a bug. It is what makes the
-sidekick a QA *tool* rather than a test generator.
+sidekick a QA _tool_ rather than a test generator.
 
 ### Workspace layout (`.qa-agent/` in the repo under test)
 
@@ -98,17 +98,18 @@ considered** — so the judgment is auditable:
 ---
 id: TC-PROJ12-03
 ac: "AC-2: reject login with an unregistered email"
-priority: high            # from Phase-1 risk ranking
-category: negative        # happy | negative | boundary | state | concurrency | security | a11y | ...
-status: planned           # planned | authored | passing | failing | flaky | bug
+priority: high # from Phase-1 risk ranking
+category: negative # happy | negative | boundary | state | concurrency | security | a11y | ...
+status: planned # planned | authored | passing | failing | flaky | bug
 spec: tests/login-unregistered.spec.ts
 ---
+
 Given an email not in the system, login shows "account not found" and does not submit.
 ```
 
 Per prioritized item, `cases.md` must show the **scenario-coverage verdict** across the
-brain's categories — *covered* (a case exists), *discarded (why)*, or *gap (flagged in
-`gaps.md`)*. A prioritized item with only a happy-path case is visible as such and must
+brain's categories — _covered_ (a case exists), _discarded (why)_, or _gap (flagged in
+`gaps.md`)_. A prioritized item with only a happy-path case is visible as such and must
 be justified.
 
 ## 4. Criterio as the engine (not a doc consulted at the end)
@@ -125,7 +126,7 @@ the spec. Today it is only wired into authoring. This design makes it the **moto
 2. **Auditable scenario coverage** lives in `cases.md` (see §3) — you or CI can see at a
    glance whether negatives and boundaries for, say, login were considered.
 3. **`gaps.md` is a first-class output.** Spec ambiguity, undefined edge case,
-   contradiction, or unstated assumption → a finding *before* any test is written.
+   contradiction, or unstated assumption → a finding _before_ any test is written.
    Finding bugs in the requirements is where the sidekick adds the most.
 4. **Exploratory pass** uses the existing `explore` module as a gap-hunting dimension:
    walk the app with lenses (tours, "follow the data", CRUD per entity) to surface what
@@ -135,14 +136,14 @@ the spec. Today it is only wired into authoring. This design makes it the **moto
 
 ## 5. The stages
 
-| Skill | Responsibility | New / reuse | Reads → Writes |
-| --- | --- | --- | --- |
-| **`qa-plan`** | Risk-prioritize, then discovery pass across scenario categories → cases + gaps | **new** | oracle → `plan.md`, `cases.md`, `gaps.md` |
-| **`qa-author`** | Cases → trustworthy Playwright specs (+ mutation proof) | reuse (adapt current `qa-agent` skill) | `cases.md` → `tests/` |
-| **`qa-run`** | Run specs, map results to case-ids, compute coverage vs plan | new (thin) | `tests/` → `runs/<date>.json` |
-| **`qa-triage`** | Diagnose failures & flakiness | wraps `triage` | `runs/` → `flaky.json` |
-| **`qa-bug`** | Draft/file bugs (markdown or Jira via MCP), linked to case-id | new (thin) | failures → `findings/` |
-| **`qa-report`** | Sign-off summary: ACs covered by trusted tests, not-covered-why, gaps, bugs | **new** | whole workspace → summary |
+| Skill           | Responsibility                                                                 | New / reuse                            | Reads → Writes                            |
+| --------------- | ------------------------------------------------------------------------------ | -------------------------------------- | ----------------------------------------- |
+| **`qa-plan`**   | Risk-prioritize, then discovery pass across scenario categories → cases + gaps | **new**                                | oracle → `plan.md`, `cases.md`, `gaps.md` |
+| **`qa-author`** | Cases → trustworthy Playwright specs (+ mutation proof)                        | reuse (adapt current `qa-agent` skill) | `cases.md` → `tests/`                     |
+| **`qa-run`**    | Run specs, map results to case-ids, compute coverage vs plan                   | new (thin)                             | `tests/` → `runs/<date>.json`             |
+| **`qa-triage`** | Diagnose failures & flakiness                                                  | wraps `triage`                         | `runs/` → `flaky.json`                    |
+| **`qa-bug`**    | Draft/file bugs (markdown or Jira via MCP), linked to case-id                  | new (thin)                             | failures → `findings/`                    |
+| **`qa-report`** | Sign-off summary: ACs covered by trusted tests, not-covered-why, gaps, bugs    | **new**                                | whole workspace → summary                 |
 
 Each stage is a focused skill file, invokable alone (à la carte) or chained by the
 router. `qa-author` inherits the existing non-negotiables: app source is read-only;
