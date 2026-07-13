@@ -56,10 +56,11 @@ specs) · qa-run · qa-triage · qa-bug · qa-report _(the last four are Plan 2)
 
 ## Status
 
-**Engine + trust gates: built and tested** (`pnpm test` → 47 green, `pnpm typecheck`
-→ clean). In place: the loop, shell guardrails, git-backed write-allowlist, model
-boundary, prompt, CLI, the **oracle** (ticket-derived source of truth), and the
-harness-enforced **trust gates** — quarantine (re-run N times) + mutation polarity.
+**Engine + trust gates + sidekick foundation: built and tested** (`pnpm test` → 127
+green, `pnpm typecheck` → clean). In place: the loop, shell guardrails, git-backed
+write-allowlist, model boundary, prompt, CLI, the **oracle** (ticket-derived source of
+truth), the harness-enforced **trust gates** (quarantine + mutation polarity), and the
+**casebook + stage-skill suite** (see above).
 
 **Oracle = tickets.** Expected behavior derives from a `--ticket`, not from
 observing the app (which would freeze current bugs as "correct").
@@ -71,19 +72,27 @@ rejected.
 
 **Also built:**
 
+- **Casebook** (`src/casebook/`) — the shared `.qa-agent/` QA state: stable case ids,
+  `cases.md` parse/serialize with scenario categories, the cycle-state machine, and
+  the I/O layer (all zod-validated, unit-tested).
+- **Stage skills** — `qa` (router), `qa-plan` (criterio-driven planning), `qa-author`
+  (author trustworthy specs from the casebook). Run inside Claude Code, no API cost.
+  The legacy all-in-one `qa-agent` skill is kept but deprecated.
+- **`check-casebook`** (`scripts/check-casebook.mts`) — validates a produced casebook
+  actually exercises criterio (fails a happy-path-only plan).
 - **Eval harness** (`src/eval.ts`, `evals/*.eval.json`) — scores whether the trust
   gates classify a labeled test set correctly. Fixture eval: 3/3.
 - **`verify` subcommand** — `qa-agent verify --repo <path> --all` runs the gates on
   existing tests, no agent.
-- **Claude Code skill** (`.claude/skills/qa-agent/`) — run the whole flow inside
-  Claude Code, no API cost.
 - **Jira oracle** — `run --jira <KEY>` (needs `JIRA_BASE_URL`/`JIRA_EMAIL`/
   `JIRA_API_TOKEN`); the skill uses the Atlassian MCP instead.
-- **Mission #2 — auto-repair** — `run --repair`: re-anchors drifted locators without
-  weakening assertions (demonstrated on the fixture).
+- **Auto-repair** — `run --repair`: re-anchors drifted locators without weakening
+  assertions (demonstrated on the fixture).
 
-**Not yet built:** element caching (Stagehand-style, cost), Missions #3–#6. A live
-agent run still needs `ANTHROPIC_API_KEY`; the Claude Code skill needs neither.
+**Not yet built (Plan 2):** the back-of-cycle stages — `qa-run`, `qa-triage`,
+`qa-bug`, `qa-report` — and their casebook artifacts (`runs/`, `flaky.json`,
+`findings/` automation); element caching (Stagehand-style, cost). A live CLI agent run
+still needs `ANTHROPIC_API_KEY`; the Claude Code skills need neither.
 
 ## Install
 
@@ -107,6 +116,24 @@ oracle. Without it the agent has no source of truth and is warned.
 Options: `--model <id>`, `--max-steps <n>`, `--timeout <ms>`, `--criteria <path>`,
 `--skip-verify` (skip the trust gates).
 
+### Run as a sidekick (inside Claude Code, no API key)
+
+The stage skills let you drive the whole cycle conversationally — no
+`ANTHROPIC_API_KEY` needed:
+
+- **`qa`** — the router. "QA this ticket" runs the guided flow (plan → author → …)
+  with checkpoints, or routes straight to a single stage.
+- **`qa-plan`** — "plan QA for &lt;ticket&gt;" → a risk-ranked, criterio-audited
+  casebook (`.qa-agent/plan.md`, `cases.md`, `gaps.md`).
+- **`qa-author`** — "author the tests" → trustworthy specs (+ mutation proofs) from
+  the casebook.
+
+Validate a produced casebook exercises real criterio:
+
+```bash
+pnpm tsx scripts/check-casebook.mts /path/to/your/app
+```
+
 ## Safety model
 
 - **App source is read-only.** The agent may only write to `tests/`, `reports/`,
@@ -119,16 +146,19 @@ Options: `--model <id>`, `--max-steps <n>`, `--timeout <ms>`, `--criteria <path>
 
 ## Layout
 
-| File               | Responsibility                                            |
-| ------------------ | --------------------------------------------------------- |
-| `src/loop.ts`      | The agent loop; observation formatting                    |
-| `src/shell.ts`     | Command screening + sandboxed execution                   |
-| `src/workspace.ts` | Git-backed write-allowlist enforcement                    |
-| `src/parse.ts`     | Extract the one action from a model turn                  |
-| `src/model.ts`     | Thin, swappable model boundary (Claude via Vercel AI SDK) |
-| `src/prompt.ts`    | System prompt + embedded criteria manual                  |
-| `src/config.ts`    | Run configuration + defaults                              |
-| `src/index.ts`     | CLI                                                       |
+| File                | Responsibility                                            |
+| ------------------- | --------------------------------------------------------- |
+| `src/loop.ts`       | The agent loop; observation formatting                    |
+| `src/shell.ts`      | Command screening + sandboxed execution                   |
+| `src/workspace.ts`  | Git-backed write-allowlist enforcement                    |
+| `src/parse.ts`      | Extract the one action from a model turn                  |
+| `src/model.ts`      | Thin, swappable model boundary (Claude via Vercel AI SDK) |
+| `src/prompt.ts`     | System prompt + embedded criteria manual                  |
+| `src/config.ts`     | Run configuration + defaults                              |
+| `src/verify.ts`     | Trust gates: quarantine + mutation polarity               |
+| `src/casebook/`     | The `.qa-agent/` casebook: case ids, cases, state, I/O    |
+| `src/index.ts`      | CLI                                                       |
+| `.claude/skills/qa` | Sidekick skills: `qa` router, `qa-plan`, `qa-author`      |
 
 ## Test
 
