@@ -17,8 +17,9 @@ context. Read `<repo>/.qa-agent/state.json` first to learn where each ticket is.
   2. `qa-author` → present the specs + trust-gate verdicts → **checkpoint**
   3. `qa-run` / `qa-triage` / `qa-bug` / `qa-report` (Plan 2; until then, say the
      stage is not built yet and stop cleanly).
-     Advance the ticket's phase in state.json after each completed stage
-     (planned → authored → run → triaged → reported).
+
+  After each completed stage's checkpoint, advance that ticket's phase in
+  state.json (planned → authored → run → triaged → reported).
 
 - **À la carte:** if the user asks for one thing ("plan cases for X", "why is this
   test flaky?"), route directly to that stage skill. The stage finds its context
