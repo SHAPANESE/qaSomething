@@ -34,6 +34,26 @@ day one.
 
 See the design in [`docs/superpowers/specs/2026-07-06-qa-agent-design.md`](docs/superpowers/specs/2026-07-06-qa-agent-design.md).
 
+## The QA sidekick (stages + casebook)
+
+Beyond one-shot authoring, `qa-agent` works across the QA cycle from inside Claude
+Code via a suite of stage-skills coordinated by a `qa` router, all sharing a
+**casebook** — `.qa-agent/` in the repo under test:
+
+| File         | Holds                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| `plan.md`    | risk-ranked plan: what to test, what was discarded, why                                   |
+| `cases.md`   | test cases with a stable id, AC, priority, and **scenario category** (auditable criterio) |
+| `gaps.md`    | spec ambiguities / undefined edge cases (findings before any test)                        |
+| `state.json` | each ticket's position in the cycle (planned → … → reported)                              |
+
+A stable case id (`TC-<TICKET>-NN`) threads requirement → case → spec → run → bug —
+a traceability matrix. Stages are stateless; the casebook holds state, so you can
+run the guided flow or jump to any stage à la carte.
+
+Stages: **qa-plan** (design + criterio audit) · **qa-author** (write trustworthy
+specs) · qa-run · qa-triage · qa-bug · qa-report _(the last four are Plan 2)_.
+
 ## Status
 
 **Engine + trust gates: built and tested** (`pnpm test` → 47 green, `pnpm typecheck`
