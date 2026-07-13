@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "spec": "tests/smoke.spec.ts",
+      "class": "unknown",
+      "note": "verify --all --json: trusted=false, stability=stable-pass, mutation=not-meaningful — \"Mutation proof still passes — assertions don't verify real behavior.\" triage --reruns 3 confirms it passes all 3 runs (not flaky, not locator-drift, not a behavior-regression of the app) — hollow: mutation proof still passes, assertions verify nothing.",
+      "updated": "2026-07-13T12:30:00.000Z"
+    }
+  ]
+}
