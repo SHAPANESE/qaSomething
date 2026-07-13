@@ -15,8 +15,12 @@ context. Read `<repo>/.qa-agent/state.json` first to learn where each ticket is.
   after each stage, show the artifact and get the user's OK before advancing:
   1. `qa-plan` → present plan.md + cases.md + gaps.md → **checkpoint**
   2. `qa-author` → present the specs + trust-gate verdicts → **checkpoint**
-  3. `qa-run` / `qa-triage` / `qa-bug` / `qa-report` (Plan 2; until then, say the
-     stage is not built yet and stop cleanly).
+  3. `qa-run` → present the run record + coverage vs plan → **checkpoint**
+  4. `qa-triage` → present failure/flakiness classification for any red cases →
+     **checkpoint**
+  5. `qa-bug` → present the case-linked finding(s) for any confirmed regressions →
+     **checkpoint**
+  6. `qa-report` → present the sign-off summary → **checkpoint**
 
   After each completed stage's checkpoint, advance that ticket's phase in
   state.json (planned → authored → run → triaged → reported).
@@ -27,14 +31,14 @@ context. Read `<repo>/.qa-agent/state.json` first to learn where each ticket is.
 
 ## Routing table
 
-| User intent                          | Stage                  |
-| ------------------------------------ | ---------------------- |
-| plan / analyze ticket / what to test | `qa-plan`              |
-| write / generate tests from the plan | `qa-author`            |
-| run tests / coverage vs plan         | `qa-run` _(Plan 2)_    |
-| why did this fail / flaky            | `qa-triage` _(Plan 2)_ |
-| file / report a bug                  | `qa-bug` _(Plan 2)_    |
-| sign-off / what's covered            | `qa-report` _(Plan 2)_ |
+| User intent                          | Stage       |
+| ------------------------------------ | ----------- |
+| plan / analyze ticket / what to test | `qa-plan`   |
+| write / generate tests from the plan | `qa-author` |
+| run tests / coverage vs plan         | `qa-run`    |
+| why did this fail / flaky            | `qa-triage` |
+| file / report a bug                  | `qa-bug`    |
+| sign-off / what's covered            | `qa-report` |
 
 ## Rules
 
