@@ -3,7 +3,7 @@
  * line. This is what re-links a spec back to its case for run/triage/report.
  */
 
-const CASE_TAG_RE = /^\/\/\s*case:\s*(TC-[A-Za-z0-9-]+-\d{2,})\b/m;
+const CASE_TAG_RE = /^\/\/[ \t]*case:[ \t]*(TC-[A-Za-z0-9-]+-\d{2,})\b/;
 
 export function parseCaseTag(specText: string): string | null {
   const m = specText.match(CASE_TAG_RE);

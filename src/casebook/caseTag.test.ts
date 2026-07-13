@@ -16,4 +16,7 @@ describe("parseCaseTag", () => {
   it("only matches a well-formed id", () => {
     expect(parseCaseTag("// case: nope")).toBeNull();
   });
+  it("does not match a tag that isn't on the first line", () => {
+    expect(parseCaseTag("import { test } from '@playwright/test';\n// case: TC-X-01\n")).toBeNull();
+  });
 });
