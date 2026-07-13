@@ -15,6 +15,7 @@ import {
   writeFinding,
   writeFlaky,
   writePlan,
+  writeReport,
   writeRun,
   writeState,
 } from "./store.js";
@@ -102,5 +103,12 @@ describe("gaps + findings I/O", () => {
     expect(await readGaps(repo)).toBe("");
     await writeFinding(repo, "PROJ-42-bug-1.md", "# Bug\nrepro...");
     expect(await listFindings(repo)).toEqual(["PROJ-42-bug-1.md"]);
+  });
+});
+
+describe("report I/O", () => {
+  it("writes report.md at the casebook's report path", async () => {
+    await writeReport(repo, "# QA sign-off — PROJ-42\n");
+    expect(await readFile(casebookPaths(repo).report, "utf8")).toBe("# QA sign-off — PROJ-42\n");
   });
 });

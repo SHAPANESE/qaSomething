@@ -13,6 +13,18 @@ import type { Step } from "./types.js";
 import { makeTriageRunner, triageSpec } from "./triage.js";
 import { playwrightRunner, verdictToJson, verifyAll, type TestVerdict } from "./verify.js";
 import { isGitRepo, listChangedPaths } from "./workspace.js";
+import {
+  casebookPaths,
+  listFindings,
+  readCases,
+  readGaps,
+  readState,
+  writeReport,
+  writeState,
+} from "./casebook/store.js";
+import { computeCoverage } from "./casebook/run.js";
+import { renderReport } from "./casebook/report.js";
+import { setPhase } from "./casebook/state.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CRITERIA = path.resolve(HERE, "..", "docs", "qa-senior-criteria.md");
@@ -249,6 +261,41 @@ async function triageAction(opts: TriageOpts): Promise<void> {
   }
 }
 
+interface ReportOpts {
+  repo: string;
+  ticket?: string;
+  date?: string;
+}
+
+async function reportAction(opts: ReportOpts): Promise<void> {
+  const repo = path.resolve(opts.repo);
+  const cases = await readCases(repo);
+  const gaps = await readGaps(repo);
+  const findings = await listFindings(repo);
+  const state = await readState(repo);
+
+  const ticketIds = Object.keys(state.tickets);
+  let ticketId = opts.ticket;
+  if (ticketId === undefined) {
+    if (ticketIds.length > 1) {
+      throw new Error(`Multiple tickets in the casebook (${ticketIds.join(", ")}); pass --ticket <id>.`);
+    }
+    ticketId = ticketIds[0] ?? "UNKNOWN";
+  }
+
+  const date = opts.date ?? new Date().toISOString().slice(0, 10);
+  const markdown = renderReport({ ticketId, date, cases, coverage: computeCoverage(cases), gaps, findings });
+  await writeReport(repo, markdown);
+
+  // Advance the ticket to the final phase, if it's tracked in the casebook.
+  if (state.tickets[ticketId]) {
+    await writeState(repo, setPhase(state, ticketId, "reported", new Date().toISOString()));
+  }
+
+  console.log(markdown);
+  console.error(`✔ wrote ${casebookPaths(repo).report}`);
+}
+
 const program = new Command();
 program.name("qa-agent").description("A senior-QA-minded agent that generates trustworthy Playwright tests.");
 
@@ -286,6 +333,14 @@ program
   .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
   .option("--all", "Triage all specs (default when --spec is omitted)")
   .action(triageAction);
+
+program
+  .command("report")
+  .description("Render the QA sign-off summary from the casebook to .qa-agent/report.md")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .option("-t, --ticket <id>", "Ticket id (defaults to the sole ticket in the casebook)")
+  .option("--date <iso>", "Date stamp for the report (defaults to today)")
+  .action(reportAction);
 
 program.parseAsync().catch((err: unknown) => {
   // Expected failures (bad config, missing ticket, …) get a clean message; only

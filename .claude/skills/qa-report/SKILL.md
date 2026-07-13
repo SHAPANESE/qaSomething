@@ -12,15 +12,17 @@ Reads the whole casebook and renders an honest release-readiness summary. The di
 
 1. Read `cases.md`, `gaps.md`, `runs/<latest>.json`, and `findings/` from
    `<repo>/.qa-agent/`.
-2. Compute coverage from case statuses (passing / total) and render the summary. The
-   engine can render it for you deterministically — build (`pnpm build`) and call the
-   `renderReport` helper via a short node script, or write the equivalent markdown:
-   headline + coverage table; **covered by trusted tests**; **bugs found** (+ finding
-   files); **NOT covered (and why to look)** (planned/authored/failing/flaky cases);
-   **spec gaps** (from gaps.md).
-3. Write it to `<repo>/.qa-agent/report.md` and set this ticket's phase in `state.json`
-   to `reported`.
-4. Present the summary to the user.
+2. **Render deterministically with the engine command** (preferred):
+   `node <qa-agent>/dist/index.js report --repo <repo>` (build first with
+   `pnpm build`). It computes coverage from case statuses (passing / total), renders
+   the summary via the `renderReport` helper, writes `<repo>/.qa-agent/report.md`, and
+   advances that ticket's phase in `state.json` to `reported`. Pass `--ticket <id>` if
+   the casebook tracks more than one ticket. (If you can't run the command, write the
+   equivalent markdown yourself — headline + coverage; **covered by trusted tests**;
+   **bugs found** (+ finding files); **NOT covered (and why to look)**
+   (planned/authored/failing/flaky cases); **spec gaps** from gaps.md — and set the
+   phase manually.)
+3. Present the summary to the user.
 
 ## Rules
 
