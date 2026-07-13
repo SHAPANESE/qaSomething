@@ -69,7 +69,7 @@ Two ways — both start from a repo and a ticket.
 You review the plan before any test is written, and nothing gets marked "done" unless
 the trust gates pass.
 
-**As a CLI (needs `ANTHROPIC_API_KEY`) — for automation / CI:**
+**As a CLI (uses your Claude Code subscription or `ANTHROPIC_API_KEY`) — for automation / CI:**
 
 ```bash
 pnpm build
