@@ -3,8 +3,8 @@
   "tickets": {
     "PROJ-42": {
       "ticketId": "PROJ-42",
-      "phase": "planned",
-      "updated": "2026-07-13T00:00:00.000Z"
+      "phase": "run",
+      "updated": "2026-07-13T12:00:00.000Z"
     }
   }
 }
