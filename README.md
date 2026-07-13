@@ -3,11 +3,34 @@
 A senior-QA-minded, SWE-style agent that generates **trustworthy** Playwright tests
 — not tests that merely pass.
 
-The engine is deliberately small and mirrors the proven mini-swe-agent / Microsoft
-Webwright pattern: one loop, the model emits **one shell command per turn**, we run
-it under guardrails, and feed the output back. The differentiator is the layer on
-top: a **senior-QA criteria "brain"** (`docs/qa-senior-criteria.md`) plus correctness
-and safety guardrails baked in from day one.
+## What it does
+
+You point it at a web app and a **ticket** (the acceptance criteria / expected
+behavior). It then acts like a senior QA engineer:
+
+1. **Explores the app** and writes end-to-end [Playwright](https://playwright.dev)
+   tests for the behavior the ticket describes.
+2. **Proves each test is real, not hollow.** For every `login.spec.ts` it also
+   writes a `login.mutation.spec.ts` that deliberately breaks the app's behavior
+   (via network interception — it never touches your app's source). The harness then
+   requires the real test to **PASS** and the mutation test to **FAIL**. A test that
+   still passes when the behavior is broken is a test that asserts nothing — so it's
+   rejected.
+3. **Reports bugs, not false green.** Expected behavior comes from the ticket, never
+   from watching the app run. That distinction matters: if the agent learned "correct"
+   by observing the app, it would enshrine current bugs as expected behavior. When the
+   app violates the ticket, the agent flags a bug instead of writing a test that
+   accommodates it.
+
+The result is a suite of tests you can trust: each one is backed by a proof that it
+actually catches the regression it claims to catch.
+
+**Why an agent and not a script:** the engine is deliberately small and mirrors the
+proven mini-swe-agent / Microsoft Webwright pattern — one loop, the model emits **one
+shell command per turn**, we run it under guardrails, and feed the output back. The
+differentiator is the layer on top: a **senior-QA criteria "brain"**
+(`docs/qa-senior-criteria.md`) plus correctness and safety guardrails baked in from
+day one.
 
 See the design in [`docs/superpowers/specs/2026-07-06-qa-agent-design.md`](docs/superpowers/specs/2026-07-06-qa-agent-design.md).
 
