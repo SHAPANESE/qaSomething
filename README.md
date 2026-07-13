@@ -1,41 +1,30 @@
 # qa-agent
 
-A **QA sidekick** you work with across the whole QA cycle — a senior-QA-minded,
-SWE-style agent that plans, authors, and stands behind **trustworthy** Playwright
-tests, not tests that merely pass.
+A QA sidekick you work with inside Claude Code. Give it a web app and a ticket, and it
+works the whole QA cycle with you like a senior tester.
 
 ## What it does
 
-You point it at a web app and a **ticket** (the acceptance criteria / expected
-behavior), and it works the cycle with you like a senior QA engineer — as one guided
-flow or one stage at a time:
+1. **Plans what to test — with real judgment.** It prioritizes by risk (deciding what
+   _not_ to test) and goes beyond the happy path: negatives, boundaries, security, and
+   more. If the ticket is ambiguous, it flags a **gap** instead of guessing. You get a
+   plan you can review before any test code exists.
+2. **Writes tests you can trust.** For every real test it also writes a "mutation" test
+   that breaks the app on purpose. If the real test still passes when the behavior is
+   broken, it asserts nothing — so it's rejected. A green test really means it catches
+   bugs.
+3. **Reports bugs, not false green.** The source of truth is the ticket, not the
+   running app (copying the app would freeze its current bugs as "correct"). When the
+   app breaks the ticket, it files a bug instead of writing a test that hides it.
 
-1. **Plans what to test, with real criterio.** It prioritizes by risk (deciding what
-   _not_ to test), then does a discovery pass across scenario categories — happy path
-   is the floor, not the goal — enumerating negatives, boundaries, state, concurrency,
-   and security cases. Ambiguities and undefined edge cases in the ticket become
-   **flagged gaps**, not silent assumptions. The plan is an auditable artifact you can
-   review before a line of test code exists.
-2. **Authors tests proven real, not hollow.** For every `login.spec.ts` it also writes
-   a `login.mutation.spec.ts` that deliberately breaks the app's behavior (via network
-   interception — it never touches your app's source). The harness requires the real
-   test to **PASS** and the mutation to **FAIL**. A test that still passes when the
-   behavior is broken asserts nothing — so it's rejected.
-3. **Reports bugs, not false green.** Expected behavior comes from the ticket, never
-   from watching the app run — otherwise the agent would enshrine current bugs as
-   "correct." When the app violates the ticket, it flags a bug instead of writing a
-   test that accommodates it.
+**The key idea:** everything lives in a **casebook** (`.qa-agent/` in your repo) —
+plan, cases, gaps, and bugs, linked by a stable id. At a glance you see: _this
+requirement → this case → this test → passed or bug_. That's what makes it a real QA
+tool, not just a test generator.
 
-The result is a suite of tests you can trust — each backed by a proof that it actually
-catches the regression it claims to — plus a paper trail (plan → cases → gaps → bugs)
-that shows the QA thinking behind it.
-
-**Why an agent and not a script:** the engine is deliberately small and mirrors the
-proven mini-swe-agent / Microsoft Webwright pattern — one loop, the model emits **one
-shell command per turn**, we run it under guardrails, and feed the output back. The
-differentiator is the layer on top: a **senior-QA criteria "brain"**
-(`docs/qa-senior-criteria.md`) that drives the planning stage, plus correctness and
-safety guardrails baked in from day one.
+> In one line: an AI senior tester that **plans, writes, and stands behind**
+> trustworthy tests — and finds bugs and gaps — working with you at every stage of the
+> QA cycle.
 
 See the design in [`docs/superpowers/specs/2026-07-06-qa-agent-design.md`](docs/superpowers/specs/2026-07-06-qa-agent-design.md).
 
