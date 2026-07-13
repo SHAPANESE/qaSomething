@@ -70,4 +70,57 @@ describe("serializeCases / parseCases", () => {
   it("returns [] for empty input", () => {
     expect(parseCases("")).toEqual([]);
   });
+
+  it("round-trips a case with a 2-line description, preserving both lines", () => {
+    const multiline: TestCase = {
+      id: "TC-PROJ-12-03",
+      ac: "AC-3: multi-line description",
+      priority: "medium",
+      category: "state",
+      status: "planned",
+      description: "First line of the description.\nSecond line of the description.",
+    };
+    const md = serializeCases([multiline]);
+    expect(parseCases(md)).toEqual([multiline]);
+  });
+
+  it("parses a hand-written block whose description spans 2 lines", () => {
+    const md = [
+      "---",
+      "id: TC-X-02",
+      "ac: multi-line body",
+      "priority: low",
+      "category: happy",
+      "status: planned",
+      "---",
+      "First line of the body.",
+      "Second line of the body.",
+      "",
+    ].join("\n");
+    const cases = parseCases(md);
+    expect(cases).toHaveLength(1);
+    expect(cases[0]!.description).toBe("First line of the body.\nSecond line of the body.");
+  });
+
+  it("parses a cases.md string using CRLF line endings without stray \\r", () => {
+    const md = [
+      "---",
+      "id: TC-X-03",
+      "ac: crlf case",
+      "priority: high",
+      "category: happy",
+      "status: planned",
+      "---",
+      "Body line one.",
+      "Body line two.",
+      "",
+    ].join("\r\n");
+    const cases = parseCases(md);
+    expect(cases).toHaveLength(1);
+    expect(cases[0]!.id).toBe("TC-X-03");
+    expect(cases[0]!.category).toBe("happy");
+    expect(cases[0]!.description).toBe("Body line one.\nBody line two.");
+    expect(cases[0]!.description).not.toContain("\r");
+    expect(cases[0]!.id).not.toContain("\r");
+  });
 });

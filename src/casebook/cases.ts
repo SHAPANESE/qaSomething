@@ -47,7 +47,7 @@ export const TestCaseSchema = z
 export type TestCase = z.infer<typeof TestCaseSchema>;
 
 // A case block: `---\n<frontmatter>\n---\n<body up to the next block or EOF>`.
-const BLOCK_RE = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*\n?([\s\S]*?)(?=\n---[ \t]*\n|\s*$)/gm;
+const BLOCK_RE = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*\n?([\s\S]*?)(?=\n---[ \t]*\n|$(?![\s\S]))/gm;
 
 function parseFrontmatter(raw: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -65,6 +65,7 @@ function parseFrontmatter(raw: string): Record<string, string> {
 }
 
 export function parseCases(md: string): TestCase[] {
+  md = md.replace(/\r\n/g, "\n");
   const cases: TestCase[] = [];
   for (const match of md.matchAll(BLOCK_RE)) {
     const fm = parseFrontmatter(match[1] ?? "");
