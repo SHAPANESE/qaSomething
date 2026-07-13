@@ -3,7 +3,7 @@ id: TC-PROJ-42-01
 ac: "AC1 — valid credentials sign in"
 priority: high
 category: happy
-status: authored
+status: passing
 spec: tests/valid-login.spec.ts
 ---
 Given valid credentials (user@test.com / secret123), when the user submits the sign-in form, the page shows exactly "Welcome, user@test.com".
@@ -13,7 +13,7 @@ id: TC-PROJ-42-02
 ac: "AC2 — wrong password shows a specific message"
 priority: high
 category: negative
-status: authored
+status: passing
 spec: tests/wrong-password.spec.ts
 ---
 Given the correct email but an incorrect password, when the user submits, the page shows exactly "Invalid credentials" and no welcome text appears.
@@ -32,7 +32,7 @@ id: TC-PROJ-42-04
 ac: "AC3 — whitespace-only email (spec gap, see gaps.md)"
 priority: medium
 category: boundary
-status: authored
+status: passing
 spec: tests/whitespace-email.spec.ts
 ---
 Given an email consisting only of spaces (" "), when the user submits, the observed behavior is documented as-is: the field is not trimmed client-side, so the app treats it as a non-empty value and falls through to the generic "Invalid credentials" path rather than "Email is required".
