@@ -23,7 +23,7 @@ id: TC-PROJ-42-03
 ac: "AC3 — empty email is rejected without hitting the API"
 priority: high
 category: negative
-status: planned
+status: bug
 ---
 Given an empty email field (any or no password), when the user submits, the page shows "Email is required" and no request is made to POST /api/login. Known planted bug: the app currently shows "Invalid credentials" and does call the API.
 
