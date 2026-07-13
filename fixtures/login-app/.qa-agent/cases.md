@@ -30,7 +30,8 @@ id: TC-PROJ-42-04
 ac: "AC3 — whitespace-only email (spec gap, see gaps.md)"
 priority: medium
 category: boundary
-status: planned
+status: authored
+spec: tests/whitespace-email.spec.ts
 ---
 Given an email consisting only of spaces (" "), when the user submits, the observed behavior is documented as-is: the field is not trimmed client-side, so the app treats it as a non-empty value and falls through to the generic "Invalid credentials" path rather than "Email is required".
 
