@@ -48,6 +48,33 @@ run the guided flow or jump to any stage à la carte.
 Stages: **qa-plan** (design + criterio audit) · **qa-author** (write trustworthy
 specs) · qa-run · qa-triage · qa-bug · qa-report _(the last four are Plan 2)_.
 
+## How to use it
+
+Two ways — both start from a repo and a ticket.
+
+**As a sidekick, inside Claude Code (no API key) — the easy way.** Just talk to it:
+
+- "**QA this ticket**" → runs the whole cycle with you (plan → author → …), stopping at
+  each step for your OK.
+- "**plan QA for PROJ-42**" → just the plan: risk-ranked cases + flagged gaps, for you
+  to review first.
+- "**author the tests**" → turns the approved plan into trustworthy tests (each with
+  its mutation proof).
+
+You review the plan before any test is written, and nothing gets marked "done" unless
+the trust gates pass.
+
+**As a CLI (needs `ANTHROPIC_API_KEY`) — for automation / CI:**
+
+```bash
+pnpm build
+node dist/index.js "Test the login flow" --repo /path/to/your/app --ticket ./PROJ-42.md
+# check tests already in a repo, no agent:
+node dist/index.js verify --repo /path/to/your/app --all
+```
+
+See [Install](#install) and [Run](#run) below for the full option list.
+
 ## Status
 
 **Engine + trust gates + sidekick foundation: built and tested** (`pnpm test` → 127
