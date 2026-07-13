@@ -96,3 +96,8 @@ export function serializeCases(cases: TestCase[]): string {
     })
     .join("\n");
 }
+
+/** Pure: patch one case by id, returning a new array (input untouched). */
+export function updateCase(cases: TestCase[], id: string, patch: Partial<TestCase>): TestCase[] {
+  return cases.map((c) => (c.id === id ? { ...c, ...patch } : c));
+}

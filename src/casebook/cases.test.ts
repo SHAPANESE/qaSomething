@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCases, serializeCases, type TestCase } from "./cases.js";
+import { parseCases, serializeCases, updateCase, type TestCase } from "./cases.js";
 
 const sample: TestCase[] = [
   {
@@ -122,5 +122,18 @@ describe("serializeCases / parseCases", () => {
     expect(cases[0]!.description).toBe("Body line one.\nBody line two.");
     expect(cases[0]!.description).not.toContain("\r");
     expect(cases[0]!.id).not.toContain("\r");
+  });
+});
+
+describe("updateCase", () => {
+  const base = [sample[0]!, sample[1]!]; // reuse the file's existing `sample`
+  it("patches one case by id without mutating the input", () => {
+    const out = updateCase(base, base[0]!.id, { status: "passing", spec: "tests/x.spec.ts" });
+    expect(out[0]!.status).toBe("passing");
+    expect(out[0]!.spec).toBe("tests/x.spec.ts");
+    expect(base[0]!.status).toBe("planned"); // input untouched
+  });
+  it("returns the array unchanged when the id is absent", () => {
+    expect(updateCase(base, "TC-NOPE-99", { status: "bug" })).toEqual(base);
   });
 });

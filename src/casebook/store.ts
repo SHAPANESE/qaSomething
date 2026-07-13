@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseCases, serializeCases, type TestCase } from "./cases.js";
 import { emptyState, parseState, serializeState, type CasebookState } from "./state.js";
+import { parseRun, serializeRun, type RunRecord } from "./run.js";
+import { emptyFlaky, parseFlaky, serializeFlaky, type FlakyRegistry } from "./flaky.js";
 
 /**
  * The casebook I/O layer: reads and writes the `.qa-agent/` QA workspace in the
@@ -74,4 +76,50 @@ export async function writePlan(repo: string, markdown: string): Promise<void> {
 export async function appendGap(repo: string, line: string): Promise<void> {
   await ensureCasebook(repo);
   await appendFile(casebookPaths(repo).gaps, line.endsWith("\n") ? line : `${line}\n`, "utf8");
+}
+
+/** Filename-safe path for a run record (Windows forbids ':'). */
+export function runPath(repo: string, date: string): string {
+  return path.join(casebookPaths(repo).runs, `${date.replace(/[:.]/g, "-")}.json`);
+}
+
+export async function writeRun(repo: string, record: RunRecord): Promise<void> {
+  await ensureCasebook(repo);
+  await writeFile(runPath(repo, record.date), serializeRun(record), "utf8");
+}
+
+export async function readLatestRun(repo: string): Promise<RunRecord | null> {
+  const dir = casebookPaths(repo).runs;
+  if (!existsSync(dir)) return null;
+  const files = (await readdir(dir)).filter((f) => f.endsWith(".json")).sort();
+  const last = files.at(-1);
+  if (!last) return null;
+  return parseRun(await readFile(path.join(dir, last), "utf8"));
+}
+
+export async function readFlaky(repo: string): Promise<FlakyRegistry> {
+  const p = casebookPaths(repo).flaky;
+  if (!existsSync(p)) return emptyFlaky();
+  return parseFlaky(await readFile(p, "utf8"));
+}
+
+export async function writeFlaky(repo: string, reg: FlakyRegistry): Promise<void> {
+  await ensureCasebook(repo);
+  await writeFile(casebookPaths(repo).flaky, serializeFlaky(reg), "utf8");
+}
+
+export async function readGaps(repo: string): Promise<string> {
+  const p = casebookPaths(repo).gaps;
+  return existsSync(p) ? readFile(p, "utf8") : "";
+}
+
+export async function listFindings(repo: string): Promise<string[]> {
+  const dir = casebookPaths(repo).findings;
+  if (!existsSync(dir)) return [];
+  return (await readdir(dir)).filter((f) => f.endsWith(".md")).sort();
+}
+
+export async function writeFinding(repo: string, name: string, markdown: string): Promise<void> {
+  await ensureCasebook(repo);
+  await writeFile(path.join(casebookPaths(repo).findings, name), markdown, "utf8");
 }
