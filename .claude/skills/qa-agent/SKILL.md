@@ -1,6 +1,6 @@
 ---
 name: qa-agent
-description: Use when asked to generate, write, or QA end-to-end tests for a web app from a ticket or acceptance criteria — acts as a senior QA engineer, writes trustworthy Playwright tests (each with a mutation proof), reports bugs where the app violates the ticket, and verifies every test with the trust gates. Triggers on "write tests for", "QA this", "test the X flow", "generate e2e tests", or a ticket + a repo.
+description: "DEPRECATED — superseded by the qa sidekick suite (use the 'qa' router, or 'qa-plan' + 'qa-author' directly). Kept only for back-compat; do not select this for new QA work. It runs the old all-in-one senior-QA flow (Playwright tests with mutation proofs) in a single skill."
 ---
 
 # QA Agent — act as a senior QA engineer
