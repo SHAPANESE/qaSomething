@@ -112,15 +112,19 @@ rejected.
 
 **Not yet built (Plan 2):** the back-of-cycle stages — `qa-run`, `qa-triage`,
 `qa-bug`, `qa-report` — and their casebook artifacts (`runs/`, `flaky.json`,
-`findings/` automation); element caching (Stagehand-style, cost). A live CLI agent run
-still needs `ANTHROPIC_API_KEY`; the Claude Code skills need neither.
+`findings/` automation); element caching (Stagehand-style, cost). The Claude Code
+skills and the trust gates need no API key; the CLI agent uses your Claude Code
+subscription (`--subscription`) or `ANTHROPIC_API_KEY`.
 
 ## Install
 
 ```bash
 pnpm install
-export ANTHROPIC_API_KEY=sk-...
 ```
+
+**No API key is needed** for the sidekick skills or the trust gates. Only the CLI
+agent (`run`) needs a model backend — and even that can use your Claude Code
+subscription (`--subscription`, no key) instead of `ANTHROPIC_API_KEY=sk-...`.
 
 ## Run
 
@@ -134,7 +138,8 @@ pnpm dev "Test the login flow" --repo /path/to/your/app --ticket ./PROJ-12.md
 The `--ticket` file (markdown, text, or JSON) defines the expected behavior — the
 oracle. Without it the agent has no source of truth and is warned.
 
-Options: `--model <id>`, `--max-steps <n>`, `--timeout <ms>`, `--criteria <path>`,
+Options: `--subscription` (use your Claude Code subscription instead of an API key),
+`--model <id>`, `--max-steps <n>`, `--timeout <ms>`, `--criteria <path>`,
 `--skip-verify` (skip the trust gates).
 
 ### Run as a sidekick (inside Claude Code, no API key)
