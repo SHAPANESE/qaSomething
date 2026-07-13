@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- QA sidekick foundation: `.qa-agent/` casebook module (`src/casebook/`) with a
+  stable case-id traceability backbone, `cases.md`/`state.json` parse-serialize,
+  and I/O layer.
+- `qa` router + `qa-plan` (criterio-driven planning with auditable scenario
+  coverage + spec-gap findings) + `qa-author` (authors specs from the casebook).
+- `scripts/check-casebook.mts` — validates a produced casebook exercises criterio.
 - **Agent engine** — a mini-swe-agent / Webwright-style loop: the model emits one
   shell command per turn, run under guardrails, output fed back until it finishes.
 - **Safety guardrails** — sandboxed shell (dangerous-command blocklist, local-only
