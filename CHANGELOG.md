@@ -14,11 +14,6 @@ All notable changes to this project are documented here. The format is based on
 - `report` CLI subcommand — `qa-agent report --repo <path>` renders the sign-off to
   `.qa-agent/report.md` and advances the ticket to the `reported` phase (a
   first-class deterministic hand for the `qa-report` skill).
-
-### Fixed
-
-- `renderReport` strips a leading heading from embedded `gaps.md` so the sign-off no
-  longer nests a top-level heading under its `## Spec gaps` section.
 - QA sidekick foundation: `.qa-agent/` casebook module (`src/casebook/`) with a
   stable case-id traceability backbone, `cases.md`/`state.json` parse-serialize,
   and I/O layer.
@@ -42,6 +37,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- `renderReport` strips a leading heading from embedded `gaps.md` so the sign-off no
+  longer nests a top-level heading under its `## Spec gaps` section.
 - Command-injection vector in the Playwright runner (argv form, no shell).
 - Write-guard and spec discovery now work when the app is a monorepo subdirectory.
 - Environment failures (app won't start) are reported as "inconclusive", not blamed

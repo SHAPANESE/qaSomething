@@ -277,10 +277,13 @@ async function reportAction(opts: ReportOpts): Promise<void> {
   const ticketIds = Object.keys(state.tickets);
   let ticketId = opts.ticket;
   if (ticketId === undefined) {
+    if (ticketIds.length === 0) {
+      throw new Error("No tickets tracked in this casebook; run qa-plan first, or pass --ticket <id>.");
+    }
     if (ticketIds.length > 1) {
       throw new Error(`Multiple tickets in the casebook (${ticketIds.join(", ")}); pass --ticket <id>.`);
     }
-    ticketId = ticketIds[0] ?? "UNKNOWN";
+    ticketId = ticketIds[0]!;
   }
 
   const date = opts.date ?? new Date().toISOString().slice(0, 10);
