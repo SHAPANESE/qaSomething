@@ -11,9 +11,6 @@ All notable changes to this project are documented here. The format is based on
   classification), `qa-bug` (case-linked findings), `qa-report` (sign-off). Casebook
   gains run records (`runs/`), a flaky registry (`flaky.json`), findings I/O, and the
   `caseTag`/`run`/`flaky`/`report` modules.
-
-### Added
-
 - QA sidekick foundation: `.qa-agent/` casebook module (`src/casebook/`) with a
   stable case-id traceability backbone, `cases.md`/`state.json` parse-serialize,
   and I/O layer.
