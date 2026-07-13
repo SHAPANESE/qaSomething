@@ -24,6 +24,7 @@ export interface CasebookPaths {
   runs: string;
   findings: string;
   flaky: string;
+  report: string;
 }
 
 export function casebookPaths(repo: string): CasebookPaths {
@@ -37,6 +38,7 @@ export function casebookPaths(repo: string): CasebookPaths {
     runs: path.join(dir, "runs"),
     findings: path.join(dir, "findings"),
     flaky: path.join(dir, "flaky.json"),
+    report: path.join(dir, "report.md"),
   };
 }
 
@@ -122,4 +124,9 @@ export async function listFindings(repo: string): Promise<string[]> {
 export async function writeFinding(repo: string, name: string, markdown: string): Promise<void> {
   await ensureCasebook(repo);
   await writeFile(path.join(casebookPaths(repo).findings, name), markdown, "utf8");
+}
+
+export async function writeReport(repo: string, markdown: string): Promise<void> {
+  await ensureCasebook(repo);
+  await writeFile(casebookPaths(repo).report, markdown, "utf8");
 }

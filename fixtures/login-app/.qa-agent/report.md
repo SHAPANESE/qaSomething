@@ -24,8 +24,6 @@ Findings: `PROJ-42-bug-1.md`
 
 ## Spec gaps
 
-# Spec gaps — PROJ-42
-
 One line per ambiguity/undefined edge case found while planning. None of these
 are silently assumed — each is a finding, not a test.
 

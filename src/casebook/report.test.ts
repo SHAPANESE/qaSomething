@@ -42,4 +42,19 @@ describe("renderReport", () => {
   it("includes the gaps", () => {
     expect(md).toContain("whitespace-only email undefined");
   });
+
+  it("strips a leading heading from gaps so it doesn't nest under '## Spec gaps'", () => {
+    const withHeading = renderReport({
+      ticketId: "PROJ-42",
+      date: "2026-07-13",
+      cases,
+      coverage: computeCoverage(cases),
+      gaps: "# Spec gaps — PROJ-42\n\n- GAP: whitespace-only email undefined",
+      findings: [],
+    });
+    // our own H2 is present, the embedded H1 title is gone, the gap body survives
+    expect(withHeading).toContain("## Spec gaps");
+    expect(withHeading).not.toContain("# Spec gaps — PROJ-42");
+    expect(withHeading).toContain("GAP: whitespace-only email undefined");
+  });
 });

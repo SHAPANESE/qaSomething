@@ -20,6 +20,15 @@ function line(c: TestCase): string {
   return `- \`${c.id}\` (${c.category}) — ${c.ac}`;
 }
 
+/**
+ * Drop a single leading markdown heading from an embedded document so `gaps.md`
+ * (which carries its own top-level title) doesn't nest a heading under our `##
+ * Spec gaps` section.
+ */
+function stripLeadingHeading(md: string): string {
+  return md.replace(/^\s*#{1,6}[ \t][^\n]*(?:\r?\n)+/, "");
+}
+
 export function renderReport(input: ReportInput): string {
   const { ticketId, date, cases, coverage: cov, gaps, findings } = input;
   const passing = cases.filter((c) => c.status === "passing");
@@ -45,6 +54,7 @@ export function renderReport(input: ReportInput): string {
   parts.push(`\n## NOT covered (and why to look)\n`);
   parts.push(notCovered.length ? notCovered.map(line).join("\n") : "_everything prioritized is covered_");
   parts.push(`\n## Spec gaps\n`);
-  parts.push(gaps.trim() ? gaps.trim() : "_none flagged_");
+  const gapsBody = stripLeadingHeading(gaps).trim();
+  parts.push(gapsBody ? gapsBody : "_none flagged_");
   return parts.join("\n") + "\n";
 }
