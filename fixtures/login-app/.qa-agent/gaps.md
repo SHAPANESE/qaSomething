@@ -20,3 +20,9 @@ are silently assumed — each is a finding, not a test.
   login attempts should be throttled or locked out. No such behavior exists in
   the current server; not testable against a defined oracle until the ticket
   (or a follow-up) states an expected policy.
+- **Script/HTML injection in the email field.** The spec/app defines no
+  behavior for markup in the email field, and there is currently no echo/render
+  surface to test against — the server always returns the static string
+  "Invalid credentials" and the client sets it via `textContent`. Flagged as a
+  future-hardening gap: if an error message ever echoes the submitted email,
+  it must be escaped, not injected as HTML.

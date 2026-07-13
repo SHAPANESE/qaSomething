@@ -16,7 +16,7 @@ probability of a bug and how badly a miss would hurt the user.
 | 3 | AC2 — wrong password shows the exact, specific `Invalid credentials` message | Medium-high (wrong/leaky messaging is a security & UX smell) | Medium (adjacent to the AC3 bug — same code path decides pass/fail) | High | Test — negative |
 | 4 | Boundary: whitespace-only email (` `) | Medium (spec doesn't say if this counts as "empty") | Medium (client does not trim; likely falls through like AC3's bug) | Medium | Test — boundary (also a gap, see gaps.md) |
 | 5 | Boundary: empty password with a valid email | Medium (analogous failure mode to AC3, but for the other field) | Medium (ticket never mentions the password field at all) | Medium | Test — boundary |
-| 6 | Security: script/markup injection in the email field (`<script>alert(1)</script>`) | Medium-high if unescaped (stored/reflected XSS in a status line) | Low (status line is set via `textContent`, not `innerHTML`, so injection is unlikely to execute — still worth a spot-check on an auth form) | Medium | Test — security |
+| 6 | Security: script/markup injection in the email field (`<script>alert(1)</script>`) | Medium-high if unescaped (stored/reflected XSS in a status line) | Low (status line is set via `textContent`, not `innerHTML`, so injection is unlikely to execute — still worth a spot-check on an auth form) | Medium | Discard — no echo/render surface exists today to observe (see gaps.md) |
 
 ### Explicitly discarded (and why)
 
@@ -47,6 +47,12 @@ probability of a bug and how badly a miss would hurt the user.
   mentioned anywhere in the ticket or visible in the server code path;
   inventing a policy and testing it would be testing our own assumption, not
   the spec. Recorded as a gap instead.
+- **Script/markup injection in the email field (security).** The server always
+  returns the static string `Invalid credentials` and the client renders it via
+  `textContent` — there is no echo/render surface today for a submitted email
+  to reach, so there is nothing observable to assert against. Not testable
+  against a defined oracle; recorded as a future-hardening gap instead (see
+  gaps.md).
 
 ## Phase 2 — Discovery pass (scenario categories per prioritized item)
 
@@ -57,13 +63,15 @@ probability of a bug and how badly a miss would hurt the user.
 | AC2 wrong password | – | **covered** (TC-02) | – | – | – | discarded (generic message is intentional, matches AC) | – | – |
 | whitespace-only email | – | – | **covered** (TC-04) | – | – | – | – | **gap** (is whitespace "empty"?) |
 | empty password | – | – | **covered** (TC-05) | – | – | – | – | **gap** (no AC for password) |
-| injection in email field | – | – | – | – | – | **covered** (TC-06) | – | – |
+| injection in email field | – | – | – | – | – | discarded (no echo surface to test) | – | **gap** |
 | email case-sensitivity | – | – | – | – | – | – | – | **gap** |
 | repeated failed attempts | – | – | – | – | – | discarded (no lockout spec) | – | **gap** |
 
 ## Result
 
-6 cases written to `cases.md`: 1 happy, 2 negative, 2 boundary, 1 security.
-4 items explicitly discarded with reasons above. 4 spec gaps recorded in
-`gaps.md`, including the whitespace/empty-email ambiguity called out for this
-task.
+5 cases written to `cases.md`: 1 happy, 2 negative, 2 boundary.
+5 items explicitly discarded with reasons above, including the email-field
+injection spot-check (no echo/render surface exists today to test against).
+5 spec gaps recorded in `gaps.md`, including the whitespace/empty-email
+ambiguity called out for this task and the future-hardening note on
+unescaped email echo.

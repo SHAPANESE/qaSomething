@@ -42,12 +42,3 @@ category: boundary
 status: planned
 ---
 Given a valid email and an empty password field, when the user submits, the app shows "Invalid credentials" (the only defined error path) since the ticket defines no dedicated empty-password message.
-
----
-id: TC-PROJ-42-06
-ac: "security spot-check — script injection in the email field"
-priority: medium
-category: security
-status: planned
----
-Given an email value containing markup ("<script>alert(1)</script>"), when the user submits and the value is echoed back (e.g. in a future improved error message), the value must be rendered as text, never executed or inserted as HTML.
