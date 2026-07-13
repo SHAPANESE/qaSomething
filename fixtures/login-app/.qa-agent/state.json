@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "tickets": {
+    "PROJ-42": {
+      "ticketId": "PROJ-42",
+      "phase": "planned",
+      "updated": "2026-07-13T00:00:00.000Z"
+    }
+  }
+}
