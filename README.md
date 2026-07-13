@@ -1,36 +1,41 @@
 # qa-agent
 
-A senior-QA-minded, SWE-style agent that generates **trustworthy** Playwright tests
-— not tests that merely pass.
+A **QA sidekick** you work with across the whole QA cycle — a senior-QA-minded,
+SWE-style agent that plans, authors, and stands behind **trustworthy** Playwright
+tests, not tests that merely pass.
 
 ## What it does
 
 You point it at a web app and a **ticket** (the acceptance criteria / expected
-behavior). It then acts like a senior QA engineer:
+behavior), and it works the cycle with you like a senior QA engineer — as one guided
+flow or one stage at a time:
 
-1. **Explores the app** and writes end-to-end [Playwright](https://playwright.dev)
-   tests for the behavior the ticket describes.
-2. **Proves each test is real, not hollow.** For every `login.spec.ts` it also
-   writes a `login.mutation.spec.ts` that deliberately breaks the app's behavior
-   (via network interception — it never touches your app's source). The harness then
-   requires the real test to **PASS** and the mutation test to **FAIL**. A test that
-   still passes when the behavior is broken is a test that asserts nothing — so it's
-   rejected.
+1. **Plans what to test, with real criterio.** It prioritizes by risk (deciding what
+   _not_ to test), then does a discovery pass across scenario categories — happy path
+   is the floor, not the goal — enumerating negatives, boundaries, state, concurrency,
+   and security cases. Ambiguities and undefined edge cases in the ticket become
+   **flagged gaps**, not silent assumptions. The plan is an auditable artifact you can
+   review before a line of test code exists.
+2. **Authors tests proven real, not hollow.** For every `login.spec.ts` it also writes
+   a `login.mutation.spec.ts` that deliberately breaks the app's behavior (via network
+   interception — it never touches your app's source). The harness requires the real
+   test to **PASS** and the mutation to **FAIL**. A test that still passes when the
+   behavior is broken asserts nothing — so it's rejected.
 3. **Reports bugs, not false green.** Expected behavior comes from the ticket, never
-   from watching the app run. That distinction matters: if the agent learned "correct"
-   by observing the app, it would enshrine current bugs as expected behavior. When the
-   app violates the ticket, the agent flags a bug instead of writing a test that
-   accommodates it.
+   from watching the app run — otherwise the agent would enshrine current bugs as
+   "correct." When the app violates the ticket, it flags a bug instead of writing a
+   test that accommodates it.
 
-The result is a suite of tests you can trust: each one is backed by a proof that it
-actually catches the regression it claims to catch.
+The result is a suite of tests you can trust — each backed by a proof that it actually
+catches the regression it claims to — plus a paper trail (plan → cases → gaps → bugs)
+that shows the QA thinking behind it.
 
 **Why an agent and not a script:** the engine is deliberately small and mirrors the
 proven mini-swe-agent / Microsoft Webwright pattern — one loop, the model emits **one
 shell command per turn**, we run it under guardrails, and feed the output back. The
 differentiator is the layer on top: a **senior-QA criteria "brain"**
-(`docs/qa-senior-criteria.md`) plus correctness and safety guardrails baked in from
-day one.
+(`docs/qa-senior-criteria.md`) that drives the planning stage, plus correctness and
+safety guardrails baked in from day one.
 
 See the design in [`docs/superpowers/specs/2026-07-06-qa-agent-design.md`](docs/superpowers/specs/2026-07-06-qa-agent-design.md).
 
