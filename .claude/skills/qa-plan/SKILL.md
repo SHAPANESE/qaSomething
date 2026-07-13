@@ -41,17 +41,14 @@ Write these files under `<repo>/.qa-agent/` (create the dir if missing):
   casebook module, so match it):
 
 ```
-
 ---
-
 id: TC-<TICKET>-NN
 ac: "<which acceptance criterion>"
 priority: high|medium|low
 category: happy|negative|boundary|state|concurrency|idempotency|data-integrity|interruption|security|a11y|performance|compatibility|i18n
 status: planned
 ---
-
-  <one or two sentences: the scenario and its expected result>
+<one or two sentences: the scenario and its expected result>
 ```
 
 Number cases sequentially per ticket (TC-<TICKET>-01, -02, …). Each prioritized
@@ -59,9 +56,7 @@ item should have MORE than a happy case where risk warrants it — a
 prioritized item with only a happy case must be justified in plan.md.
 
 - **gaps.md** — one line per spec gap/ambiguity/contradiction found.
-- **state.json** — set this ticket's phase to `planned`. If unsure of the exact
-  JSON, run:
-  `node <qa-agent>/dist/index.js` is NOT needed — write state.json as
+- **state.json** — set this ticket's phase to `planned`. Write it as:
   `{ "version": 1, "tickets": { "<TICKET>": { "ticketId": "<TICKET>", "phase": "planned", "updated": "<ISO8601>" } } }`.
 
 ## Definition of done
