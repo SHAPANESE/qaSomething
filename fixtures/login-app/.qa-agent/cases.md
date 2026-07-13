@@ -3,7 +3,8 @@ id: TC-PROJ-42-01
 ac: "AC1 — valid credentials sign in"
 priority: high
 category: happy
-status: planned
+status: authored
+spec: tests/valid-login.spec.ts
 ---
 Given valid credentials (user@test.com / secret123), when the user submits the sign-in form, the page shows exactly "Welcome, user@test.com".
 
@@ -12,7 +13,8 @@ id: TC-PROJ-42-02
 ac: "AC2 — wrong password shows a specific message"
 priority: high
 category: negative
-status: planned
+status: authored
+spec: tests/wrong-password.spec.ts
 ---
 Given the correct email but an incorrect password, when the user submits, the page shows exactly "Invalid credentials" and no welcome text appears.
 

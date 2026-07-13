@@ -1,3 +1,4 @@
+// case: TC-PROJ-42-01
 import { test, expect } from "@playwright/test";
 
 // PROJ-42 AC1: valid credentials show a welcome message.
