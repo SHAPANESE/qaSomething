@@ -50,9 +50,13 @@ const RECOMMENDATION: Record<FailureClass, string> = {
  * the presence of both as a behavior signal, a known and acceptable edge.
  */
 export function classifyFailure(output: string): { class: FailureClass; evidence: string } {
-  if (/Expected:/.test(output) && /Received:/.test(output)) {
-    const expected = output.match(/Expected:\s*(.+)/)?.[1]?.trim() ?? "?";
-    const received = output.match(/Received:\s*(.+)/)?.[1]?.trim() ?? "?";
+  // Playwright labels the two sides differently per matcher: bare "Expected:"
+  // for toBe, but "Expected string:" / "Expected pattern:" for toHaveText etc.
+  const EXPECTED_RE = /Expected(?: \w+)?:\s*(.+)/;
+  const RECEIVED_RE = /Received(?: \w+)?:\s*(.+)/;
+  if (EXPECTED_RE.test(output) && RECEIVED_RE.test(output)) {
+    const expected = output.match(EXPECTED_RE)?.[1]?.trim() ?? "?";
+    const received = output.match(RECEIVED_RE)?.[1]?.trim() ?? "?";
     return {
       class: "behavior-regression",
       evidence: `Assertion mismatch — expected ${expected}, received ${received}.`,
@@ -99,7 +103,9 @@ export async function triageSpec(specFile: string, reruns: number, runner: TestR
         "Fix the setup (start command, port, browser install), then re-run — this is not the test's fault.",
     };
   }
-  const { class: cls, evidence } = classifyFailure(failing.output);
+  // Prefer the JSON-extracted failure messages (ANSI-stripped, no reporter
+  // chrome); fall back to the raw output when no structured report was produced.
+  const { class: cls, evidence } = classifyFailure(failing.errorText ?? failing.output);
   return { spec, class: cls, evidence, recommendation: RECOMMENDATION[cls] };
 }
 

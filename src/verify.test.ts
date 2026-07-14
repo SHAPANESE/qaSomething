@@ -6,11 +6,37 @@ import {
   interpretRun,
   looksInconclusive,
   pairSpecs,
+  parsePlaywrightJson,
   verdictToJson,
   verifySpec,
   type TestRunResult,
   type TestRunner,
 } from "./verify.js";
+
+/** Build a minimal Playwright `--reporter=json` payload for tests. */
+function pwJson(opts: { expected?: number; unexpected?: number; flaky?: number; errors?: string[] }): string {
+  return JSON.stringify({
+    config: { version: "1.0.0" },
+    suites: [
+      {
+        title: "example.spec.ts",
+        specs: (opts.errors ?? []).map((message) => ({
+          title: "a test",
+          ok: false,
+          tests: [{ results: [{ status: "failed", errors: [{ message }] }] }],
+        })),
+      },
+    ],
+    errors: [],
+    stats: {
+      expected: opts.expected ?? 0,
+      unexpected: opts.unexpected ?? 0,
+      flaky: opts.flaky ?? 0,
+      skipped: 0,
+      duration: 12,
+    },
+  });
+}
 
 function run(passed: boolean): TestRunResult {
   return {
@@ -41,6 +67,57 @@ describe("interpretRun", () => {
   });
 });
 
+describe("parsePlaywrightJson", () => {
+  it("reads pass/fail counts from stats", () => {
+    const report = parsePlaywrightJson(pwJson({ expected: 3, unexpected: 1 }));
+    expect(report).toMatchObject({ expected: 3, unexpected: 1 });
+  });
+
+  it("collects ANSI-stripped failure messages", () => {
+    const report = parsePlaywrightJson(pwJson({ unexpected: 1, errors: ['[31mExpected string:[39m "a"'] }));
+    expect(report?.errorMessages.join("")).toContain('Expected string: "a"');
+    expect(report?.errorMessages.join("")).not.toContain("[");
+  });
+
+  it("tolerates web-server noise printed before the report", () => {
+    const noisy = `> app@1.0.0 start\n{ server listening }\nboot ok\n${pwJson({ expected: 2 })}`;
+    expect(parsePlaywrightJson(noisy)).toMatchObject({ expected: 2 });
+  });
+
+  it("returns null when there is no JSON report (env failure)", () => {
+    expect(parsePlaywrightJson("Executable doesn't exist\nplaywright install")).toBeNull();
+  });
+});
+
+describe("interpretRun — JSON reporter", () => {
+  it("passes when stats show no unexpected failures on exit 0", () => {
+    const r = interpretRun(0, pwJson({ expected: 2, unexpected: 0 }));
+    expect(r.passed).toBe(true);
+    expect(r.passedCount).toBe(2);
+    expect(r.failedCount).toBe(0);
+  });
+
+  it("fails and surfaces errorText when stats show an unexpected failure", () => {
+    const r = interpretRun(1, pwJson({ unexpected: 1, errors: ['Expected string: "x"'] }));
+    expect(r.passed).toBe(false);
+    expect(r.failedCount).toBe(1);
+    expect(r.errorText).toContain('Expected string: "x"');
+  });
+
+  it("stays inconclusive when a report coexists with an env-failure signal", () => {
+    const output = `${pwJson({ unexpected: 0 })}\nExecutable doesn't exist at ...\nplaywright install`;
+    const r = interpretRun(1, output);
+    expect(r.inconclusive).toBe(true);
+    expect(r.passed).toBe(false);
+  });
+
+  it("falls back to the line reporter when no JSON is present", () => {
+    const r = interpretRun(0, "Running 1 test\n  1 passed (1.2s)");
+    expect(r.passed).toBe(true);
+    expect(r.passedCount).toBe(1);
+  });
+});
+
 describe("looksInconclusive", () => {
   it("flags environment/tooling failures, not test failures", () => {
     expect(looksInconclusive("Error: No tests found", 1)).toBe(true);
@@ -48,6 +125,13 @@ describe("looksInconclusive", () => {
     expect(looksInconclusive("Timed out waiting 20000ms from config.webServer", 1)).toBe(true);
     expect(looksInconclusive("listen EADDRINUSE: address already in use", 1)).toBe(true);
     expect(looksInconclusive("anything", 127)).toBe(true);
+  });
+  it("flags a missing runner binary on both POSIX and Windows", () => {
+    expect(looksInconclusive("bash: playwright: command not found", 127)).toBe(true);
+    expect(looksInconclusive("'playwright' is not recognized as an internal or external command", 1)).toBe(
+      true,
+    );
+    expect(looksInconclusive("Error: spawn playwright ENOENT", 1)).toBe(true);
   });
   it("does not flag a genuine assertion failure", () => {
     expect(looksInconclusive("Expected: a\nReceived: b\n1 failed", 1)).toBe(false);

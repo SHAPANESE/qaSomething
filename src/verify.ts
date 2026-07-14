@@ -19,6 +19,12 @@ export interface TestRunResult {
   passedCount: number;
   failedCount: number;
   output: string;
+  /**
+   * The test failure messages, ANSI-stripped, extracted from the structured JSON
+   * report when available. Cleaner than scraping `output` — triage classifies on
+   * this. Undefined when there was no JSON report (env failure / older path).
+   */
+  errorText?: string;
   /** True when the run couldn't execute (app/Playwright not runnable) — NOT a test failure. */
   inconclusive?: boolean;
 }
@@ -31,7 +37,9 @@ const INCONCLUSIVE_SIGNALS: RegExp[] = [
   /web ?server.*exited early/i,
   /process from config\.webServer/i,
   /EADDRINUSE/i,
-  /command not found/i,
+  /command not found/i, // POSIX shell: the runner binary is missing
+  /is not recognized as an internal or external command/i, // Windows cmd: same
+  /spawn \S+ ENOENT/i, // execa: the runner binary could not be spawned
   /Cannot find module/i,
 ];
 
@@ -44,10 +52,97 @@ export function looksInconclusive(output: string, exitCode: number | null): bool
 /** Signature so the runner can be faked in tests and swapped for CI. */
 export type TestRunner = (specFile: string) => Promise<TestRunResult>;
 
-const COUNT_RE = (label: string) => new RegExp(`(\\d+)\\s+${label}`, "i");
+// Match an ANSI SGR colour sequence: ESC (0x1b) built at runtime so no literal
+// control char sits in the regex source (keeps eslint no-control-regex happy).
+const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+const stripAnsi = (s: string): string => s.replace(ANSI_SGR, "");
 
-/** Pure: turn a raw Playwright process result into a structured verdict. */
-export function interpretRun(exitCode: number | null, output: string): TestRunResult {
+/** The slice of Playwright's `--reporter=json` output the gates actually need. */
+export interface PlaywrightReport {
+  /** Passing tests (`stats.expected`). */
+  expected: number;
+  /** Failing tests (`stats.unexpected`). */
+  unexpected: number;
+  /** Tests that only passed on retry (`stats.flaky`). */
+  flaky: number;
+  /** Every failure message, ANSI-stripped. */
+  errorMessages: string[];
+}
+
+/**
+ * Extract the balanced JSON object that starts at `output[start]`, respecting
+ * string literals, or null if it never closes. Kept small and dependency-free.
+ */
+function balancedObjectFrom(output: string, start: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < output.length; i++) {
+    const ch = output[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return output.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function collectErrorMessages(node: unknown, out: string[]): void {
+  if (node === null || typeof node !== "object") return;
+  const obj = node as Record<string, unknown>;
+  const message = obj["message"];
+  if (typeof message === "string" && message.length > 0) out.push(stripAnsi(message));
+  for (const value of Object.values(obj)) {
+    if (Array.isArray(value)) for (const item of value) collectErrorMessages(item, out);
+    else if (value !== null && typeof value === "object") collectErrorMessages(value, out);
+  }
+}
+
+/**
+ * Pure: parse Playwright's `--reporter=json` output. The JSON is the primary,
+ * stable signal — far less brittle than scraping "N passed" from human text,
+ * which changes between Playwright versions. Tolerates leading noise (a web
+ * server logging to stdout before the report) by scanning candidate objects
+ * until one parses and carries `stats`. Returns null when no report is present
+ * (a genuine environment failure), which routes callers to the text fallback.
+ */
+export function parsePlaywrightJson(output: string): PlaywrightReport | null {
+  let from = output.indexOf("{");
+  while (from !== -1) {
+    const candidate = balancedObjectFrom(output, from);
+    if (candidate) {
+      try {
+        const parsed: unknown = JSON.parse(candidate);
+        if (parsed !== null && typeof parsed === "object" && "stats" in parsed) {
+          const stats = (parsed as { stats: Record<string, unknown> }).stats;
+          const num = (k: string): number => (typeof stats[k] === "number" ? (stats[k] as number) : 0);
+          const errorMessages: string[] = [];
+          collectErrorMessages(parsed, errorMessages);
+          return {
+            expected: num("expected"),
+            unexpected: num("unexpected"),
+            flaky: num("flaky"),
+            errorMessages,
+          };
+        }
+      } catch {
+        /* not the report object — keep scanning */
+      }
+    }
+    from = output.indexOf("{", from + 1);
+  }
+  return null;
+}
+
+/** Pure: fallback for when no JSON report exists — scrape the human line reporter. */
+const COUNT_RE = (label: string) => new RegExp(`(\\d+)\\s+${label}`, "i");
+function interpretLineOutput(exitCode: number | null, output: string): TestRunResult {
   const passedMatch = output.match(COUNT_RE("passed"));
   const failedMatch = output.match(COUNT_RE("failed"));
   const passedCount = passedMatch ? Number.parseInt(passedMatch[1] ?? "0", 10) : 0;
@@ -59,6 +154,31 @@ export function interpretRun(exitCode: number | null, output: string): TestRunRe
     passedCount,
     failedCount,
     output,
+    ...(inconclusive ? { inconclusive: true } : {}),
+  };
+}
+
+/**
+ * Pure: turn a raw Playwright process result into a structured verdict. Prefers
+ * the machine-readable JSON report; falls back to scraping the line reporter
+ * when no JSON is present (e.g. Playwright crashed before producing a report).
+ */
+export function interpretRun(exitCode: number | null, output: string): TestRunResult {
+  const report = parsePlaywrightJson(output);
+  if (report === null) return interpretLineOutput(exitCode, output);
+
+  // An env failure can still emit a (near-empty) report; the text signals on the
+  // full output — which includes stderr like "Executable doesn't exist" — remain
+  // the authority on "couldn't run", so we keep checking them alongside the JSON.
+  const inconclusive = looksInconclusive(output, exitCode);
+  const errorText = report.errorMessages.join("\n\n");
+  return {
+    passed: exitCode === 0 && report.unexpected === 0 && !inconclusive,
+    exitCode,
+    passedCount: report.expected,
+    failedCount: report.unexpected,
+    output,
+    ...(errorText ? { errorText } : {}),
     ...(inconclusive ? { inconclusive: true } : {}),
   };
 }
@@ -201,20 +321,24 @@ export async function verifyAll(
 /**
  * Default runner: run the repo's local Playwright CLI as `playwright test <spec>`.
  *
- * The spec path is passed as a SEPARATE ARGV, never interpolated into a shell
- * string — a test filename with shell metacharacters (from an untrusted repo)
- * cannot inject commands. `preferLocal` resolves the repo's own Playwright binary
- * and handles Windows `.cmd` resolution, so no shell is needed at all.
+ * Uses `--reporter=json` for a stable, machine-readable result rather than
+ * scraping human text (see interpretRun). The spec path is passed as a SEPARATE
+ * ARGV, never interpolated into a shell string — a test filename with shell
+ * metacharacters (from an untrusted repo) cannot inject commands. `preferLocal`
+ * resolves the repo's own Playwright binary and handles Windows `.cmd`
+ * resolution, so no shell is needed at all.
  */
 export function playwrightRunner(repoPath: string, timeoutMs: number): TestRunner {
   return async (specFile) => {
     const rel = path.relative(repoPath, specFile).split(path.sep).join("/") || specFile;
-    const res = await execa("playwright", ["test", rel, "--reporter=line"], {
+    const res = await execa("playwright", ["test", rel, "--reporter=json"], {
       cwd: repoPath,
       timeout: timeoutMs,
       reject: false,
       preferLocal: true,
       localDir: repoPath,
+      // Keep the JSON report on stdout even if it's large.
+      maxBuffer: 64 * 1024 * 1024,
     });
     const output = `${res.stdout ?? ""}\n${res.stderr ?? ""}`;
     return interpretRun(typeof res.exitCode === "number" ? res.exitCode : null, output);
