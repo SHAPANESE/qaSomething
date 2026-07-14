@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tasks</title>
+  </head>
+  <body>
+    <main>
+      <h1>Tasks</h1>
+      <form id="new-task" novalidate>
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" />
+        <label for="priority">Priority</label>
+        <select id="priority" name="priority">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+        <button type="submit">Add</button>
+      </form>
+      <ul id="tasks" aria-label="Tasks"></ul>
+      <p id="message" role="status" aria-live="polite"></p>
+    </main>
+    <script>
+      const form = document.getElementById("new-task");
+      const list = document.getElementById("tasks");
+      const msg = document.getElementById("message");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        msg.textContent = "";
+        const title = document.getElementById("title").value;
+        const priority = document.getElementById("priority").value;
+        // The form always posts; the server is the source of truth for validation
+        // (so the required/length rules are exercised over the wire).
+        const res = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title, priority }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          const li = document.createElement("li");
+          li.textContent = data.task.title;
+          list.appendChild(li);
+          document.getElementById("title").value = "";
+        } else {
+          msg.textContent = data.error;
+        }
+      });
+    </script>
+  </body>
+</html>
