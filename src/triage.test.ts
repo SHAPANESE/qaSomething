@@ -24,6 +24,19 @@ describe("classifyFailure", () => {
     expect(r.evidence).toMatch(/expected .* received/i);
   });
 
+  it("classifies a toHaveText mismatch (Expected string:/Received string:) as a regression", () => {
+    // toHaveText also prints "Timed out ... waiting for expect(...)" — the
+    // Expected/Received signal must win, or a real regression looks like drift.
+    const output = [
+      "Timed out 5000ms waiting for expect(locator).toHaveText(expected)",
+      'Expected string: "Invalid credentials"',
+      'Received string: "Welcome"',
+    ].join("\n");
+    const r = classifyFailure(output);
+    expect(r.class).toBe("behavior-regression");
+    expect(r.evidence).toMatch(/Invalid credentials/);
+  });
+
   it("classifies a locator timeout as drift", () => {
     const output = "Timeout 5000ms exceeded.\nwaiting for getByRole('button', { name: 'Sign in' })";
     expect(classifyFailure(output).class).toBe("locator-drift");
@@ -60,6 +73,20 @@ describe("triageSpec", () => {
     const t = await triageSpec("x.spec.ts", 2, runner([run(false, out), run(false, out)]));
     expect(t.class).toBe("behavior-regression");
     expect(t.recommendation).toMatch(/bug|ticket/i);
+  });
+
+  it("classifies from errorText (JSON report) in preference to raw output", async () => {
+    // Raw output is JSON chrome; the clean message lives in errorText.
+    const failing: TestRunResult = {
+      passed: false,
+      exitCode: 1,
+      passedCount: 0,
+      failedCount: 1,
+      output: '{"stats":{"unexpected":1}}',
+      errorText: 'Expected string: "a"\nReceived string: "b"',
+    };
+    const t = await triageSpec("x.spec.ts", 2, runner([failing, failing]));
+    expect(t.class).toBe("behavior-regression");
   });
 
   it("routes locator drift to repair mode", async () => {
