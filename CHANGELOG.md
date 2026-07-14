@@ -20,6 +20,9 @@ All notable changes to this project are documented here. The format is based on
 - `qa` router + `qa-plan` (criterio-driven planning with auditable scenario
   coverage + spec-gap findings) + `qa-author` (authors specs from the casebook).
 - `scripts/check-casebook.mts` — validates a produced casebook exercises criterio.
+- Second fixture app + eval (`fixtures/task-app`, `evals/task-app.eval.json`) — an
+  add-task form with a planted 80-char boundary bug, proving the trust gates and
+  mutation-polarity check generalize beyond the login flow (eval: 3/3).
 - **Agent engine** — a mini-swe-agent / Webwright-style loop: the model emits one
   shell command per turn, run under guardrails, output fed back until it finishes.
 - **Safety guardrails** — sandboxed shell (dangerous-command blocklist, local-only
@@ -35,11 +38,24 @@ All notable changes to this project are documented here. The format is based on
 - **Claude Code skill** — run the flow inside Claude Code on a subscription (no key).
 - **Tooling** — ESLint, Prettier, `pnpm check`, CI workflow, and an OSS baseline.
 
+### Changed
+
+- Trust gates and triage now read Playwright's `--reporter=json` instead of scraping
+  the human line reporter, so pass/fail counts and failure classification no longer
+  break when Playwright changes its console formatting. The line-reporter parser is
+  kept as a fallback for runs that never produce a JSON report (environment failures).
+
 ### Fixed
 
+- Triage now recognizes `Expected string:` / `Expected pattern:` matcher output (e.g.
+  `toHaveText`), so a real behavior regression is no longer misclassified as
+  locator-drift when the failure message also mentions a timeout.
 - `renderReport` strips a leading heading from embedded `gaps.md` so the sign-off no
   longer nests a top-level heading under its `## Spec gaps` section.
 - Command-injection vector in the Playwright runner (argv form, no shell).
 - Write-guard and spec discovery now work when the app is a monorepo subdirectory.
 - Environment failures (app won't start) are reported as "inconclusive", not blamed
   on the test.
+- A missing Playwright runner is now detected as "inconclusive" on Windows too
+  (`'playwright' is not recognized …`) and via execa's `spawn … ENOENT`, so a broken
+  setup is no longer misreported as a genuine test failure.

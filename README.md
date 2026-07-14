@@ -82,7 +82,7 @@ See [Install](#install) and [Run](#run) below for the full option list.
 
 ## Status
 
-**Engine + trust gates + full sidekick cycle: built and tested** (`pnpm test` → 149
+**Engine + trust gates + full sidekick cycle: built and tested** (`pnpm test` → 162
 green, `pnpm typecheck` → clean). In place: the loop, shell guardrails, git-backed
 write-allowlist, model boundary, prompt, CLI, the **oracle** (ticket-derived source of
 truth), the harness-enforced **trust gates** (quarantine + mutation polarity), and the
@@ -113,7 +113,8 @@ rejected.
 - **`check-casebook`** (`scripts/check-casebook.mts`) — validates a produced casebook
   actually exercises criterio (fails a happy-path-only plan).
 - **Eval harness** (`src/eval.ts`, `evals/*.eval.json`) — scores whether the trust
-  gates classify a labeled test set correctly. Fixture eval: 3/3.
+  gates classify a labeled test set correctly. Two fixtures (`login-app`,
+  `task-app`), each eval: 3/3.
 - **`verify` subcommand** — `qa-agent verify --repo <path> --all` runs the gates on
   existing tests, no agent.
 - **Jira oracle** — `run --jira <KEY>` (needs `JIRA_BASE_URL`/`JIRA_EMAIL`/
