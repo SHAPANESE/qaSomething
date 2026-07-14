@@ -286,13 +286,16 @@ async function reportAction(opts: ReportOpts): Promise<void> {
     ticketId = ticketIds[0]!;
   }
 
-  const date = opts.date ?? new Date().toISOString().slice(0, 10);
+  // One clock read for the whole action, so the report date and the state
+  // timestamp can't disagree across a midnight boundary.
+  const now = new Date();
+  const date = opts.date ?? now.toISOString().slice(0, 10);
   const markdown = renderReport({ ticketId, date, cases, coverage: computeCoverage(cases), gaps, findings });
   await writeReport(repo, markdown);
 
   // Advance the ticket to the final phase, if it's tracked in the casebook.
   if (state.tickets[ticketId]) {
-    await writeState(repo, setPhase(state, ticketId, "reported", new Date().toISOString()));
+    await writeState(repo, setPhase(state, ticketId, "reported", now.toISOString()));
   }
 
   console.log(markdown);
