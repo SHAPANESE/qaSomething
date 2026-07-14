@@ -1,0 +1,21 @@
+{
+  "repo": "fixtures/task-app",
+  "reruns": 2,
+  "cases": [
+    {
+      "spec": "tests/add-task.spec.ts",
+      "expected": "trusted",
+      "note": "AC1 — meaningful behavioral test; mutation (create API broken) goes red"
+    },
+    {
+      "spec": "tests/blank-title.spec.ts",
+      "expected": "trusted",
+      "note": "AC2 — meaningful; mutation (API wrongly accepts blank) goes red"
+    },
+    {
+      "spec": "tests/smoke.spec.ts",
+      "expected": "rejected",
+      "note": "Hollow smoke; mutation still passes → not meaningful"
+    }
+  ]
+}

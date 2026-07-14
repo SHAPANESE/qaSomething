@@ -1,0 +1,14 @@
+{
+  "name": "task-app-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Second fixture app under test: an add-task form with a planted boundary bug (80-char limit not enforced).",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}
