@@ -24,6 +24,7 @@ export const SCENARIO_CATEGORIES = [
   "performance",
   "compatibility",
   "i18n",
+  "contract",
 ] as const;
 export type ScenarioCategory = (typeof SCENARIO_CATEGORIES)[number];
 

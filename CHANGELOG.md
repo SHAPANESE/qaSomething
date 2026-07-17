@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **API contract testing (Schemathesis).** New `api` CLI subcommand contract-tests
+  a running API against its OpenAPI/GraphQL spec — the spec is the oracle, a
+  violation is a finding (the API-layer analogue of the Playwright trust gates).
+  Adds the `src/api/schemathesis.ts` module (pure JUnit parser + run interpreter +
+  arg builder + injectable runner), a `contract` scenario category, and wires the
+  contract path through the `qa-plan`/`qa-author`/`qa-run`/`qa-triage` skills.
+  Proven end-to-end on `fixtures/task-app`: it auto-finds the planted AC3 boundary
+  bug (server accepts a title past the contract's `maxLength`) with no hand-written
+  case. Uses `uvx schemathesis` (override with `SCHEMATHESIS_BIN`).
 - Back-of-cycle stages: `qa-run` (run + coverage), `qa-triage` (failure/flakiness
   classification), `qa-bug` (case-linked findings), `qa-report` (sign-off). Casebook
   gains run records (`runs/`), a flaky registry (`flaky.json`), findings I/O, and the

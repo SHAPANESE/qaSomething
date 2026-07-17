@@ -25,6 +25,13 @@ import {
 import { computeCoverage } from "./casebook/run.js";
 import { renderReport } from "./casebook/report.js";
 import { setPhase } from "./casebook/state.js";
+import {
+  contractResultToJson,
+  runContract,
+  schemathesisRunner,
+  type GenerationMode,
+  type SchemathesisOptions,
+} from "./api/schemathesis.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CRITERIA = path.resolve(HERE, "..", "docs", "qa-senior-criteria.md");
@@ -302,6 +309,90 @@ async function reportAction(opts: ReportOpts): Promise<void> {
   console.error(`✔ wrote ${casebookPaths(repo).report}`);
 }
 
+interface ApiOpts {
+  repo: string;
+  spec: string;
+  url?: string;
+  checks?: string;
+  mode?: string;
+  maxExamples?: number;
+  case?: string;
+  json?: boolean;
+  timeout?: number;
+}
+
+const GEN_MODES: GenerationMode[] = ["positive", "negative", "all"];
+
+async function apiAction(opts: ApiOpts): Promise<void> {
+  const overrides: Partial<RunConfig> = {};
+  if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
+  const { config, project } = await buildConfig(path.resolve(opts.repo), overrides);
+
+  const url = opts.url ?? project?.baseUrl;
+  if (url === undefined) {
+    console.error("Error: no --url given and no baseUrl in qa-agent.config.json.");
+    process.exitCode = 1;
+    return;
+  }
+  if (opts.mode !== undefined && !GEN_MODES.includes(opts.mode as GenerationMode)) {
+    console.error(`Error: --mode must be one of ${GEN_MODES.join(", ")}.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const specPath = path.isAbsolute(opts.spec) ? opts.spec : path.join(config.repoPath, opts.spec);
+  const options: SchemathesisOptions = {
+    spec: specPath,
+    url,
+    ...(opts.checks ? { checks: opts.checks.split(",").map((c) => c.trim()) } : {}),
+    ...(opts.mode ? { mode: opts.mode as GenerationMode } : {}),
+    ...(opts.maxExamples !== undefined ? { maxExamples: opts.maxExamples } : {}),
+  };
+
+  const runner = schemathesisRunner(config.repoPath, config.commandTimeoutMs);
+  const result = await runContract(options, runner).catch((err: unknown) => {
+    console.error(`⚠ Contract run could not execute (is uvx/schemathesis available?): ${String(err)}`);
+    return null;
+  });
+  if (result === null) return;
+
+  if (opts.json === true) {
+    console.log(JSON.stringify(contractResultToJson(result), null, 2));
+    if (!result.passed && result.inconclusive !== true) process.exitCode = 1;
+    return;
+  }
+
+  console.log(`\nContract: ${opts.spec}  →  ${url}`);
+  if (result.inconclusive === true) {
+    console.log(
+      "⚠ inconclusive — could not run the contract (schema didn't load, no operations, or Schemathesis is missing). This is an environment problem, not a violation.",
+    );
+    const tail = result.output.trim().split("\n").slice(-6).join("\n");
+    if (tail) console.log(tail.replace(/^/gm, "   "));
+    return;
+  }
+
+  for (const op of result.report?.operations ?? []) {
+    const bad = op.failures.length > 0;
+    console.log(
+      `\n${bad ? "✗" : "✔"} ${op.operation}${bad ? `  — ${op.failures.length} contract violation(s)` : ""}`,
+    );
+    for (const f of op.failures) {
+      console.log(`   · [${f.check}] ${f.message}`);
+      if (f.curl) console.log(`     repro: ${f.curl}`);
+    }
+  }
+  console.log(
+    `\n${result.passed ? "✔ contract upheld" : "✗ contract violated"} — ${result.report?.tests ?? 0} operation(s) tested, ${result.failures.length} violation(s).`,
+  );
+  if (opts.case && result.failures.length > 0) {
+    console.log(
+      `   → these violations map to case ${opts.case}; a violation is a behavior-regression → file with qa-bug.`,
+    );
+  }
+  if (!result.passed) process.exitCode = 1;
+}
+
 const program = new Command();
 program.name("qa-agent").description("A senior-QA-minded agent that generates trustworthy Playwright tests.");
 
@@ -347,6 +438,20 @@ program
   .option("-t, --ticket <id>", "Ticket id (defaults to the sole ticket in the casebook)")
   .option("--date <iso>", "Date stamp for the report (defaults to today)")
   .action(reportAction);
+
+program
+  .command("api")
+  .description("Contract-test an API against its OpenAPI/GraphQL spec with Schemathesis (the oracle)")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .requiredOption("-s, --spec <path>", "OpenAPI/GraphQL contract (repo-relative or absolute)")
+  .option("-u, --url <base>", "Base URL of the running API (defaults to baseUrl in qa-agent.config.json)")
+  .option("--checks <list>", "Comma-separated Schemathesis checks (default: a curated contract set)")
+  .option("--mode <mode>", "Generation mode: positive | negative | all (default: all)")
+  .option("--max-examples <n>", "Examples generated per check", (v) => Number.parseInt(v, 10))
+  .option("--case <id>", "Case id these operations map to (for casebook traceability)")
+  .option("--json", "Emit machine-readable JSON (for CI / qa-run)")
+  .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
+  .action(apiAction);
 
 program.parseAsync().catch((err: unknown) => {
   // Expected failures (bad config, missing ticket, …) get a clean message; only

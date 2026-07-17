@@ -26,7 +26,12 @@ here — that is `qa-author`.
    case), **discarded** (say why), or **gap** (the ticket does not define it →
    record it in gaps.md). Categories: happy, negative, boundary, state,
    concurrency, idempotency, data-integrity, interruption, security, a11y,
-   performance, compatibility, i18n. **Happy path is the floor, not the goal.**
+   performance, compatibility, i18n, contract. **Happy path is the floor, not the goal.**
+   - **contract** = the API layer. When the ticket touches an HTTP/GraphQL API,
+     the acceptance criteria ARE a contract (types, required fields, limits,
+     status codes). Encode them as an OpenAPI spec — that contract is the oracle
+     and `qa-author`/`qa-run` fuzz the running API against it with Schemathesis.
+     No spec exists for the endpoint? That absence is itself a **gap** → gaps.md.
 3. **Question the spec.** Ambiguity, undefined edge case, contradiction, or an
    unstated assumption is a FINDING → gaps.md, before any test exists.
 4. **Optional exploratory pass** to surface what the ticket does not say: use the
@@ -45,7 +50,7 @@ Write these files under `<repo>/.qa-agent/` (create the dir if missing):
 id: TC-<TICKET>-NN
 ac: "<which acceptance criterion>"
 priority: high|medium|low
-category: happy|negative|boundary|state|concurrency|idempotency|data-integrity|interruption|security|a11y|performance|compatibility|i18n
+category: happy|negative|boundary|state|concurrency|idempotency|data-integrity|interruption|security|a11y|performance|compatibility|i18n|contract
 status: planned
 ---
 <one or two sentences: the scenario and its expected result>

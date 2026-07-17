@@ -34,6 +34,26 @@ authoring without cases means no criterio and no traceability.
    Every kept test must be **✔ TRUSTED**. Fix any **✗ REJECTED** (flaky or hollow).
 5. Summarize: which cases are now covered by trusted tests, which produced bugs.
 
+## Contract (API) cases — `category: contract`
+
+For a case that exercises an HTTP/GraphQL API, the artifact is **an OpenAPI
+contract**, not a Playwright spec — Schemathesis fuzzes the running API against
+it. The spec IS the assertions.
+
+1. Write the contract encoding the ticket's ACs (types, required fields, limits,
+   enums, status codes) to an allowed write dir, e.g. `tests/contract/<TICKET>.openapi.yaml`.
+   Point the case's `spec:` at that file and set `status: authored`.
+2. **Contract mutation proof (teeth check).** A contract with no constraints
+   passes vacuously — the API-layer "hollow test". Prove the constraint under
+   test has teeth: keep a relaxed sibling (e.g. drop the `maxLength`) and confirm
+   Schemathesis STOPS flagging it — the finding must come from the constraint,
+   not from noise. Also treat "0 operations tested" as REJECTED, never a pass.
+3. **Verify with Schemathesis** (the API trust gate):
+   `node <qa-agent>/dist/index.js api --repo <repo> --spec tests/contract/<TICKET>.openapi.yaml --json`
+   A clean `passed: true` over tested operations = the API upholds the contract.
+   Any violation = the app violates the ticket → write a bug finding (step 2 of
+   the main flow), NOT a passing case. Use the emitted `curl` as repro evidence.
+
 ## Definition of done
 
 - Each authored spec is TRUSTED (stable pass + its mutation goes red) and carries

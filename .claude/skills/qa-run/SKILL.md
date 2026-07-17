@@ -11,11 +11,19 @@ casebook. It does NOT diagnose failures (that's qa-triage) or write tests (qa-au
 ## Steps
 
 1. Read `<repo>/.qa-agent/cases.md`. Determine the specs to run (the `spec:` of each
-   authored case; or all `tests/*.spec.ts` excluding `*.mutation.spec.ts`).
-2. Run them. Prefer the engine's trust gate for authored cases:
-   `node <qa-agent>/dist/index.js verify --repo <repo> --all --json` — it already
-   pairs each spec with its mutation and returns TRUSTED/REJECTED per spec. Otherwise
-   run Playwright directly (`npx playwright test`).
+   authored case; or all `tests/*.spec.ts` excluding `*.mutation.spec.ts`). Split by
+   type: a `spec:` ending in `.yaml`/`.yml` (or `category: contract`) is an **API
+   contract case**; everything else is a Playwright case.
+2. Run them.
+   - **Playwright cases:** prefer the engine's trust gate:
+     `node <qa-agent>/dist/index.js verify --repo <repo> --all --json` — it already
+     pairs each spec with its mutation and returns TRUSTED/REJECTED per spec. Otherwise
+     run Playwright directly (`npx playwright test`).
+   - **Contract cases:** run Schemathesis via the engine:
+     `node <qa-agent>/dist/index.js api --repo <repo> --spec <contract.yaml> --json`.
+     Map each JSON `operation` to its case: `outcome: pass|fail|inconclusive` maps
+     straight into the run record. A violation is a real `fail` (behavior-regression),
+     never flaky.
 3. For each spec, read its first line to get the `// case: TC-...` tag → map the
    result to that case id.
 4. Write a run record to `<repo>/.qa-agent/runs/<ISO-date>.json` in this shape:
