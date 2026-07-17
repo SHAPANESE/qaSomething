@@ -53,16 +53,16 @@ Without it the agent has no source of truth and is warned. Other options: `--sub
 `.qa-agent/` in the repo under test holds all QA state. Stages are stateless; the
 casebook holds state, so you can run the guided flow or jump to any stage à la carte.
 
-| File         | Holds                                                                   |
-| ------------ | ----------------------------------------------------------------------- |
-| `plan.md`    | risk-ranked plan: what to test, what was discarded, why                 |
-| `cases.md`   | test cases with a stable id, AC, priority, and scenario category        |
-| `gaps.md`    | spec ambiguities / undefined edge cases (findings before any test)      |
-| `runs/`      | per-run records mapping each case to its test result                    |
-| `flaky.json` | flakiness registry from triage                                          |
-| `findings/`  | case-linked bug write-ups (markdown, or filed as a Jira issue)          |
-| `report.md`  | sign-off summary: covered / not covered / gaps / bugs                   |
-| `state.json` | each ticket's position in the cycle (planned → … → reported)            |
+| File         | Holds                                                              |
+| ------------ | ------------------------------------------------------------------ |
+| `plan.md`    | risk-ranked plan: what to test, what was discarded, why            |
+| `cases.md`   | test cases with a stable id, AC, priority, and scenario category   |
+| `gaps.md`    | spec ambiguities / undefined edge cases (findings before any test) |
+| `runs/`      | per-run records mapping each case to its test result               |
+| `flaky.json` | flakiness registry from triage                                     |
+| `findings/`  | case-linked bug write-ups (markdown, or filed as a Jira issue)     |
+| `report.md`  | sign-off summary: covered / not covered / gaps / bugs              |
+| `state.json` | each ticket's position in the cycle (planned → … → reported)       |
 
 ## Safety model
 
