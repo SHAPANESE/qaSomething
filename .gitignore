@@ -11,3 +11,6 @@ playwright-report/
 
 # subagent-driven-development scratch
 .superpowers/
+
+# Schemathesis cache (written to the API-under-test cwd)
+.schemathesis/

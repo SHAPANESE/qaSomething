@@ -1,0 +1,68 @@
+openapi: 3.0.3
+info:
+  title: Task App API
+  version: "1.0.0"
+  description: >
+    API contract derived from ticket TASK-7 acceptance criteria.
+    The title length cap (AC3) is encoded as maxLength: 80 — the spec is the
+    source of truth. Schemathesis fuzzes against this contract.
+servers:
+  - url: http://localhost:3200
+paths:
+  /api/tasks:
+    post:
+      summary: Create a task
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewTask"
+      responses:
+        "201":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, task]
+                properties:
+                  ok:
+                    type: boolean
+                  task:
+                    $ref: "#/components/schemas/Task"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, error]
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+components:
+  schemas:
+    NewTask:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          # AC2: non-empty. AC3: hard cap at 80 characters (80 ok, 81 not).
+          minLength: 1
+          maxLength: 80
+        # priority is a UI choice; TASK-7 specifies no server-side rule for it,
+        # so it is intentionally left unconstrained and out of the fuzz surface.
+    Task:
+      type: object
+      required: [title, priority]
+      properties:
+        title:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high]

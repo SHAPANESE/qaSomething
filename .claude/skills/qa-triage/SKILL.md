@@ -25,6 +25,15 @@ bugs itself — it routes.
    `status` to `flaky`.
 5. Set this ticket's phase in `state.json` to `triaged`.
 
+## Contract (API) failures
+
+A Schemathesis contract violation (`api --json` → an operation with `outcome: fail`)
+is a **behavior-regression** by construction: the API broke a rule its own contract
+(the ticket's ACs) declares — there is no "locator" to drift. Route it to `qa-bug`,
+set the case `status: failing`, and put the emitted `curl` repro + the check name in
+the `note`. An `inconclusive` operation (schema didn't load, API down, Schemathesis
+missing) is an ENV problem, not a regression — fix the setup and re-run.
+
 ## Rules
 
 - Distinguish an ENV problem (app down, browser missing) from a real failure — don't
