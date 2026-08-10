@@ -7,6 +7,7 @@ import {
   looksInconclusive,
   pairSpecs,
   parsePlaywrightJson,
+  parseRuntimeEvidence,
   verdictToJson,
   verifySpec,
   type TestRunResult,
@@ -86,6 +87,33 @@ describe("parsePlaywrightJson", () => {
 
   it("returns null when there is no JSON report (env failure)", () => {
     expect(parsePlaywrightJson("Executable doesn't exist\nplaywright install")).toBeNull();
+  });
+});
+
+describe("parseRuntimeEvidence", () => {
+  it("extracts structured evidence emitted by an instrumented task", () => {
+    const evidence = {
+      channels: ["ui", "network", "console", "screenshot"],
+      oracleReached: true,
+      finalUrl: "http://localhost/tasks",
+      responses: [{ method: "POST", url: "http://localhost/api/tasks", status: 201 }],
+      console: [],
+      pageErrors: [],
+    };
+    expect(parseRuntimeEvidence(`noise\n__QA_EVIDENCE__${JSON.stringify(evidence)}\nmore`)).toEqual(evidence);
+    const reporter = JSON.stringify({
+      suites: [
+        {
+          specs: [
+            {
+              tests: [{ results: [{ stdout: [{ text: `__QA_EVIDENCE__${JSON.stringify(evidence)}\n` }] }] }],
+            },
+          ],
+        },
+      ],
+      stats: {},
+    });
+    expect(parseRuntimeEvidence(reporter)).toEqual(evidence);
   });
 });
 

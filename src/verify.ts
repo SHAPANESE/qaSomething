@@ -27,6 +27,88 @@ export interface TestRunResult {
   errorText?: string;
   /** True when the run couldn't execute (app/Playwright not runnable) — NOT a test failure. */
   inconclusive?: boolean;
+  /** Runtime observations emitted by instrumented QA task specs. */
+  evidence?: RuntimeEvidence;
+}
+
+export interface RuntimeEvidence {
+  channels: Array<"ui" | "network" | "console" | "screenshot">;
+  oracleReached: boolean;
+  finalUrl?: string;
+  pageTitle?: string;
+  responses: Array<{ method: string; url: string; status: number }>;
+  console: Array<{ type: string; text: string }>;
+  pageErrors: string[];
+}
+
+const EVIDENCE_MARKER = "__QA_EVIDENCE__";
+
+/** Read the last complete evidence marker from Playwright's stdout/JSON report. */
+export function parseRuntimeEvidence(output: string): RuntimeEvidence | undefined {
+  const fromText = (text: string): RuntimeEvidence | undefined => {
+    const marker = text.indexOf(EVIDENCE_MARKER);
+    if (marker === -1) return undefined;
+    try {
+      return JSON.parse(text.slice(marker + EVIDENCE_MARKER.length).trim()) as RuntimeEvidence;
+    } catch {
+      return undefined;
+    }
+  };
+  const fromNode = (node: unknown): RuntimeEvidence | undefined => {
+    if (typeof node === "string") return fromText(node);
+    if (node === null || typeof node !== "object") return undefined;
+    for (const value of Object.values(node as Record<string, unknown>)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const found = fromNode(item);
+          if (found !== undefined) return found;
+        }
+      } else {
+        const found = fromNode(value);
+        if (found !== undefined) return found;
+      }
+    }
+    return undefined;
+  };
+
+  const direct = fromText(output);
+  if (direct !== undefined) return direct;
+
+  // Playwright's JSON reporter stores stdout as escaped `text` fields. Parse
+  // report-shaped objects and inspect their decoded string values.
+  let objectStart = output.indexOf("{");
+  while (objectStart !== -1) {
+    const objectText = balancedObjectFrom(output, objectStart);
+    if (objectText !== null) {
+      try {
+        const found = fromNode(JSON.parse(objectText));
+        if (found !== undefined) return found;
+      } catch {
+        // Keep scanning noisy output for the next candidate object.
+      }
+    }
+    objectStart = output.indexOf("{", objectStart + 1);
+  }
+
+  let searchFrom = 0;
+  let latest: RuntimeEvidence | undefined;
+  while (true) {
+    const index = output.indexOf(EVIDENCE_MARKER, searchFrom);
+    if (index === -1) break;
+    const jsonStart = output.indexOf("{", index);
+    if (jsonStart === -1) break;
+    const candidate = balancedObjectFrom(output, jsonStart);
+    if (candidate !== null) {
+      try {
+        latest = JSON.parse(candidate) as RuntimeEvidence;
+      } catch {
+        // JSON reporter may escape the marker payload. The plain marker emitted
+        // by the test is normally also present; continue scanning.
+      }
+    }
+    searchFrom = index + EVIDENCE_MARKER.length;
+  }
+  return latest;
 }
 
 const INCONCLUSIVE_SIGNALS: RegExp[] = [
@@ -148,6 +230,7 @@ function interpretLineOutput(exitCode: number | null, output: string): TestRunRe
   const passedCount = passedMatch ? Number.parseInt(passedMatch[1] ?? "0", 10) : 0;
   const failedCount = failedMatch ? Number.parseInt(failedMatch[1] ?? "0", 10) : 0;
   const inconclusive = looksInconclusive(output, exitCode);
+  const evidence = parseRuntimeEvidence(output);
   return {
     passed: exitCode === 0 && failedCount === 0 && !inconclusive,
     exitCode,
@@ -155,6 +238,7 @@ function interpretLineOutput(exitCode: number | null, output: string): TestRunRe
     failedCount,
     output,
     ...(inconclusive ? { inconclusive: true } : {}),
+    ...(evidence === undefined ? {} : { evidence }),
   };
 }
 
@@ -172,6 +256,7 @@ export function interpretRun(exitCode: number | null, output: string): TestRunRe
   // the authority on "couldn't run", so we keep checking them alongside the JSON.
   const inconclusive = looksInconclusive(output, exitCode);
   const errorText = report.errorMessages.join("\n\n");
+  const evidence = parseRuntimeEvidence(output);
   return {
     passed: exitCode === 0 && report.unexpected === 0 && !inconclusive,
     exitCode,
@@ -180,6 +265,7 @@ export function interpretRun(exitCode: number | null, output: string): TestRunRe
     output,
     ...(errorText ? { errorText } : {}),
     ...(inconclusive ? { inconclusive: true } : {}),
+    ...(evidence === undefined ? {} : { evidence }),
   };
 }
 

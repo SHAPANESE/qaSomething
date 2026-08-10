@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { screenCommand } from "./shell.js";
+import { resolveBashBinary, screenCommand } from "./shell.js";
+
+describe("resolveBashBinary", () => {
+  it("honors an explicit portable bash path", () => {
+    expect(resolveBashBinary("win32", { QA_AGENT_BASH: "D:\\tools\\bash.exe" })).toBe("D:\\tools\\bash.exe");
+  });
+
+  it("uses bash from PATH on non-Windows platforms", () => {
+    expect(resolveBashBinary("linux", {})).toBe("bash");
+  });
+});
 
 describe("screenCommand", () => {
   it("allows ordinary read/inspect commands", () => {

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "id": "create-task-evidence",
+  "goal": "Create one task and capture UI, network, console, and screenshot evidence",
+  "spec": "tests/qa-generated/create-task-evidence.spec.ts",
+  "target": {
+    "baseUrl": "http://127.0.0.1:3200",
+    "actor": "default"
+  },
+  "oracle": "One submission creates exactly one visible task.",
+  "attempts": 2,
+  "evidence": {
+    "required": ["ui", "network", "console", "screenshot"]
+  },
+  "safety": {
+    "allow": ["read", "create_test_data"],
+    "deny": ["external_message", "payment", "user_admin"]
+  }
+}

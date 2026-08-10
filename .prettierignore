@@ -5,3 +5,4 @@ pnpm-lock.yaml
 CHANGELOG.md
 .superpowers/
 .claude/skills/
+**/tests/qa-generated/

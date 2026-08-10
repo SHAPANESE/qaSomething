@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "create-task",
+  "goal": "Create a task and verify that it appears in the task list",
+  "spec": "tests/add-task.spec.ts",
+  "target": {
+    "baseUrl": "http://127.0.0.1:3200",
+    "actor": "default"
+  },
+  "oracle": "A successful submission creates exactly one visible task.",
+  "attempts": 2
+}

@@ -1,6 +1,6 @@
 import { execa } from "execa";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -34,7 +34,7 @@ const TURNS = [
 async function setupRepo(subdir: string | null): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "qa-agent-int-"));
   const appDir = subdir ? path.join(root, subdir) : root;
-  if (subdir) await execa("mkdir", ["-p", appDir]);
+  if (subdir) await mkdir(appDir, { recursive: true });
   await writeFile(path.join(appDir, "server.mjs"), "console.log('app');\n");
   await execa("git", ["init", "-q"], { cwd: root });
   await execa("git", ["add", "-A"], { cwd: root });

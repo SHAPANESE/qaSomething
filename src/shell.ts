@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import { existsSync } from "node:fs";
 import type { CommandResult } from "./types.js";
 
 export interface BlocklistRule {
@@ -73,6 +74,13 @@ export interface RunCommandOptions {
   blocklist?: BlocklistRule[];
 }
 
+export function resolveBashBinary(platform = process.platform, env: NodeJS.ProcessEnv = process.env): string {
+  if (env["QA_AGENT_BASH"]) return env["QA_AGENT_BASH"];
+  if (platform !== "win32") return "bash";
+  const candidates = ["C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files\\Git\\usr\\bin\\bash.exe"];
+  return candidates.find((candidate) => existsSync(candidate)) ?? "bash";
+}
+
 /**
  * Screen, then execute a shell command via `bash -c`. Never throws on a
  * non-zero exit — the failure is data the agent needs to see. A blocked
@@ -95,7 +103,7 @@ export async function runCommand(command: string, options: RunCommandOptions): P
   }
 
   const started = process.hrtime.bigint();
-  const result = await execa("bash", ["-c", command], {
+  const result = await execa(resolveBashBinary(), ["-c", command], {
     cwd: options.cwd,
     timeout: options.timeoutMs,
     reject: false,

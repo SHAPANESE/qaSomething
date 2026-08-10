@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "taskId": "create-task-evidence",
+  "title": "creates exactly one visible task",
+  "actions": [
+    {
+      "id": "navigate",
+      "intent": "Open the task list",
+      "code": "await page.goto(\"/\")",
+      "required": true,
+      "risk": "read"
+    },
+    {
+      "id": "fill-title",
+      "intent": "Enter a unique task title",
+      "code": "await page.getByLabel(\"Title\").fill(\"Evidence task\")",
+      "risk": "create_test_data"
+    },
+    {
+      "id": "submit",
+      "intent": "Create the task",
+      "code": "await page.getByRole(\"button\", { name: \"Add\" }).click()",
+      "risk": "create_test_data"
+    }
+  ],
+  "assertion": {
+    "intent": "Exactly one matching task is visible",
+    "code": "await expect(page.getByText(\"Evidence task\", { exact: true })).toHaveCount(1)"
+  }
+}

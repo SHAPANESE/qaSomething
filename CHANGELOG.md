@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Task-driven exploratory QA MVP.** New `init`, `task explore`, `task compile`,
+  and `task run` commands turn focused goals into semantic action sequences,
+  enforce action-level safety policies, compile instrumented Playwright specs,
+  capture UI/network/console/screenshot evidence, repeat runs independently,
+  minimize failing sequences, and classify results without treating flaky,
+  blocked, or environment outcomes as green.
+
 - **API contract testing (Schemathesis).** New `api` CLI subcommand contract-tests
   a running API against its OpenAPI/GraphQL spec — the spec is the oracle, a
   violation is a finding (the API-layer analogue of the Playwright trust gates).

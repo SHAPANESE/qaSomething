@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveConfig, type RunConfig } from "./config.js";
@@ -32,6 +32,12 @@ import {
   type GenerationMode,
   type SchemathesisOptions,
 } from "./api/schemathesis.js";
+import { loadTask } from "./task/schema.js";
+import { runTask } from "./task/runner.js";
+import { runTaskAgent } from "./task/agent.js";
+import { initializeProject } from "./init.js";
+import { compileSequence, loadTaskSequence } from "./task/sequence.js";
+import { evaluateSafety } from "./task/safety.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CRITERIA = path.resolve(HERE, "..", "docs", "qa-senior-criteria.md");
@@ -125,7 +131,7 @@ async function runGates(config: RunConfig, specFiles: string[], json = false): P
     verdicts = await verifyAll(specFiles, config.reruns, runner);
   } catch (err) {
     console.warn(`⚠ Verification could not run (is the app + Playwright runnable?): ${String(err)}`);
-    return true;
+    return false;
   }
 
   if (json) {
@@ -321,6 +327,125 @@ interface ApiOpts {
   timeout?: number;
 }
 
+interface TaskRunOpts {
+  repo: string;
+  file: string;
+  timeout?: number;
+  json?: boolean;
+}
+
+interface TaskExploreOpts extends TaskRunOpts {
+  model?: string;
+  maxSteps?: number;
+  subscription?: boolean;
+}
+
+interface TaskCompileOpts {
+  repo: string;
+  file: string;
+  sequence: string;
+  output?: string;
+}
+
+async function taskCompileAction(opts: TaskCompileOpts): Promise<void> {
+  const repoPath = path.resolve(opts.repo);
+  const taskFile = path.isAbsolute(opts.file) ? opts.file : path.join(repoPath, opts.file);
+  const sequenceFile = path.isAbsolute(opts.sequence) ? opts.sequence : path.join(repoPath, opts.sequence);
+  const task = await loadTask(taskFile);
+  const sequence = await loadTaskSequence(sequenceFile);
+  if (sequence.taskId !== task.id) throw new Error(`Sequence taskId must match task ${task.id}.`);
+  const violations = evaluateSafety(task, sequence);
+  if (violations.length > 0) throw new Error(violations.map((item) => item.reason).join("\n"));
+  const output = opts.output ?? `tests/qa-generated/${task.id}.spec.ts`;
+  const outputFile = path.resolve(repoPath, output);
+  const relative = path.relative(repoPath, outputFile);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Compiled spec must stay inside the repository.");
+  }
+  await mkdir(path.dirname(outputFile), { recursive: true });
+  await writeFile(
+    outputFile,
+    compileSequence(sequence, {
+      ...(task.target?.baseUrl === undefined ? {} : { baseUrl: task.target.baseUrl }),
+      ...(task.target?.storageState === undefined ? {} : { storageState: task.target.storageState }),
+    }),
+    "utf8",
+  );
+  console.log(`✔ compiled ${relative.split(path.sep).join("/")}`);
+}
+
+async function taskRunAction(opts: TaskRunOpts): Promise<void> {
+  const repoPath = path.resolve(opts.repo);
+  const taskFile = path.isAbsolute(opts.file) ? opts.file : path.join(repoPath, opts.file);
+  const task = await loadTask(taskFile);
+  const overrides: Partial<RunConfig> = {};
+  if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
+  const { config } = await buildConfig(repoPath, overrides);
+  const result = await runTask({
+    repoPath,
+    task,
+    runner: playwrightRunner(repoPath, config.commandTimeoutMs),
+    allowedWriteDirs: config.allowedWriteDirs,
+  });
+
+  if (opts.json === true) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    const marker = result.status === "passed" ? "✔" : result.status === "failed" ? "✘" : "⚠";
+    console.log(`\n${marker} ${result.taskId}: ${result.status.toUpperCase()} (${result.classification})`);
+    console.log(`   ${result.reason}`);
+    console.log(`   attempts: ${result.attempts.length} · artifacts: ${result.artifactsDir}`);
+  }
+
+  // A blocked or inconclusive task is deliberately not green. Exit 2 lets CI
+  // distinguish it from a reproducible behavioral failure (exit 1).
+  if (result.status === "failed") process.exitCode = 1;
+  if (result.status === "blocked" || result.status === "inconclusive") process.exitCode = 2;
+}
+
+async function taskExploreAction(opts: TaskExploreOpts): Promise<void> {
+  if (opts.subscription !== true && !process.env["ANTHROPIC_API_KEY"]) {
+    console.error("Error: ANTHROPIC_API_KEY is not set. Export it, or use --subscription.");
+    process.exitCode = 1;
+    return;
+  }
+  const repoPath = path.resolve(opts.repo);
+  const taskFile = path.isAbsolute(opts.file) ? opts.file : path.join(repoPath, opts.file);
+  const task = await loadTask(taskFile);
+  const overrides: Partial<RunConfig> = {};
+  if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
+  if (opts.maxSteps !== undefined) overrides.maxSteps = opts.maxSteps;
+  if (opts.model !== undefined) overrides.modelId = opts.model;
+  const { config } = await buildConfig(repoPath, overrides);
+  const model = opts.subscription === true ? claudeCliModel() : createAnthropicModel(config.modelId);
+  const result = await runTaskAgent({
+    model,
+    task,
+    config,
+    runner: playwrightRunner(repoPath, config.commandTimeoutMs),
+    ...(opts.json === true ? {} : { onStep: renderStep }),
+  });
+
+  if (opts.json === true) console.log(JSON.stringify(result, null, 2));
+  else if (result.finished && result.verification) {
+    console.log(
+      `\n${result.verification.status.toUpperCase()} ${task.id} (${result.verification.classification})`,
+    );
+    console.log(`   final spec: ${result.finalSpec}`);
+    console.log(`   ${result.verification.reason}`);
+    if (result.shrink && result.shrink.removedActionIds.length > 0) {
+      console.log(`   minimized: removed ${result.shrink.removedActionIds.join(", ")}`);
+    }
+    console.log(`   artifacts: ${result.verification.artifactsDir}`);
+  } else {
+    console.log(`\nINCONCLUSIVE ${task.id}: ${result.stoppedReason ?? "No final verdict."}`);
+  }
+
+  if (!result.finished) process.exitCode = 2;
+  else if (result.verification?.status === "failed") process.exitCode = 1;
+  else if (result.verification?.status !== "passed") process.exitCode = 2;
+}
+
 const GEN_MODES: GenerationMode[] = ["positive", "negative", "all"];
 
 async function apiAction(opts: ApiOpts): Promise<void> {
@@ -394,7 +519,27 @@ async function apiAction(opts: ApiOpts): Promise<void> {
 }
 
 const program = new Command();
-program.name("qa-agent").description("A senior-QA-minded agent that generates trustworthy Playwright tests.");
+program.name("qa-agent").description("Task-driven exploratory QA with reproducible Playwright evidence.");
+
+program
+  .command("init")
+  .description("Initialize a repository for task-driven exploratory QA")
+  .requiredOption("-r, --repo <path>", "Path to the repository")
+  .requiredOption("-u, --url <url>", "Local or staging target URL")
+  .option("--start-command <command>", "Command that starts the local application")
+  .option("--auth <path>", "Existing Playwright storageState file to copy locally")
+  .action(async (opts: { repo: string; url: string; startCommand?: string; auth?: string }) => {
+    const result = await initializeProject({
+      repoPath: opts.repo,
+      baseUrl: opts.url,
+      ...(opts.startCommand === undefined ? {} : { startCommand: opts.startCommand }),
+      ...(opts.auth === undefined ? {} : { authFile: opts.auth }),
+    });
+    console.log(`✔ initialized ${path.resolve(opts.repo)}`);
+    console.log(`  config: ${result.configFile}`);
+    console.log(`  first task: ${result.taskFile}`);
+    if (result.authFile) console.log(`  auth: ${result.authFile}`);
+  });
 
 program
   .command("run <mission>", { isDefault: true })
@@ -452,6 +597,38 @@ program
   .option("--json", "Emit machine-readable JSON (for CI / qa-run)")
   .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
   .action(apiAction);
+
+const taskCommand = program.command("task").description("Run isolated, reproducible QA tasks.");
+
+taskCommand
+  .command("run")
+  .description("Execute a task contract and save an isolated run workspace")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .requiredOption("-f, --file <path>", "Task JSON file (repo-relative or absolute)")
+  .option("--timeout <ms>", "Per-attempt timeout in ms", (v) => Number.parseInt(v, 10))
+  .option("--json", "Emit the structured task result")
+  .action(taskRunAction);
+
+taskCommand
+  .command("explore")
+  .description("Explore one task, author a final Playwright spec, and verify it independently")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .requiredOption("-f, --file <path>", "Task JSON file (repo-relative or absolute)")
+  .option("-m, --model <id>", "Anthropic model id")
+  .option("--max-steps <n>", "Maximum agent iterations", (v) => Number.parseInt(v, 10))
+  .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
+  .option("--subscription", "Use the Claude Code CLI instead of ANTHROPIC_API_KEY")
+  .option("--json", "Emit the structured agent result")
+  .action(taskExploreAction);
+
+taskCommand
+  .command("compile")
+  .description("Compile a reviewed semantic sequence into an instrumented Playwright spec")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .requiredOption("-f, --file <path>", "Task JSON file")
+  .requiredOption("-s, --sequence <path>", "Semantic sequence JSON file")
+  .option("-o, --output <path>", "Repo-relative output spec")
+  .action(taskCompileAction);
 
 program.parseAsync().catch((err: unknown) => {
   // Expected failures (bad config, missing ticket, …) get a clean message; only
