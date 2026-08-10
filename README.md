@@ -89,6 +89,64 @@ node dist/index.js task run \
 
 For `task run`, the task must contain a repo-relative `spec`.
 
+## Example: finding a duplicate-submit bug
+
+Imagine a task form in staging. A normal click works, but a fast double click
+may create two records. You create a focused task:
+
+```json
+{
+  "version": 1,
+  "id": "task-double-submit",
+  "goal": "Try to create one task twice with a double submit",
+  "target": { "baseUrl": "https://staging.example.test" },
+  "oracle": "One user submission creates exactly one task.",
+  "attempts": 3,
+  "evidence": { "required": ["ui", "network", "screenshot"] },
+  "safety": {
+    "allow": ["read", "create_test_data", "delete_test_data"],
+    "deny": ["external_message", "payment", "user_admin"]
+  }
+}
+```
+
+Run it:
+
+```bash
+node dist/index.js task explore \
+  --repo . \
+  --file qa-tasks/task-double-submit.json \
+  --subscription
+```
+
+The agent explores with disposable Playwright probes and records semantic
+actions such as `navigate`, `fill-title`, `open-help`, and `double-submit`. The
+harness then:
+
+1. Rejects any action outside the task safety policy.
+2. Compiles the sequence into a normal Playwright spec.
+3. Executes it three times in clean browser sessions.
+4. Confirms that two `POST /api/tasks` requests and two visible tasks occur.
+5. Removes irrelevant steps such as `open-help` and reproduces the same failure.
+6. Returns a non-zero exit code with a minimal test, network evidence, and
+   screenshots.
+
+Example result:
+
+```text
+FAILED task-double-submit (confirmed_bug)
+  reproduced: 3/3
+  expected task delta: 1
+  actual task delta: 2
+  network: POST /api/tasks ×2
+  minimized: removed open-help
+  final spec: tests/qa-generated/task-double-submit.spec.ts
+```
+
+If the same sequence passes every time, the result is `verified`. If runs are
+mixed, the app cannot start, or required evidence is missing, QASomething
+returns `inconclusive` instead of reporting a false green or an invented bug.
+
 ## Evidence and trust
 
 Instrumented task specs capture:

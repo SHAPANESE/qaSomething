@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 import { qaTaskSchema, resolveTaskSpec } from "./schema.js";
 
 describe("qaTaskSchema", () => {
@@ -21,7 +22,10 @@ describe("qaTaskSchema", () => {
 
 describe("resolveTaskSpec", () => {
   it("keeps specs inside the repository", () => {
-    expect(resolveTaskSpec("C:\\repo", "tests/login.spec.ts")).toBe("C:\\repo\\tests\\login.spec.ts");
-    expect(() => resolveTaskSpec("C:\\repo", "..\\outside.spec.ts")).toThrow(/inside the repository/);
+    const repo = path.resolve("repo");
+    expect(resolveTaskSpec(repo, path.join("tests", "login.spec.ts"))).toBe(
+      path.join(repo, "tests", "login.spec.ts"),
+    );
+    expect(() => resolveTaskSpec(repo, path.join("..", "outside.spec.ts"))).toThrow(/inside the repository/);
   });
 });
