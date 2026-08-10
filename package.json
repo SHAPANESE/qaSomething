@@ -13,7 +13,6 @@
     "mutation-testing",
     "claude"
   ],
-  "author": "",
   "engines": {
     "node": ">=22"
   },
