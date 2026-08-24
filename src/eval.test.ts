@@ -25,6 +25,7 @@ describe("scoreEvals", () => {
     ]);
     expect(report.score).toBe(1);
     expect(report.passed).toBe(2);
+    expect(report.metrics).toMatchObject({ truePositives: 1, trueNegatives: 1, precision: 1, recall: 1 });
   });
 
   it("marks a case wrong when the gate misclassifies it", () => {
@@ -36,6 +37,7 @@ describe("scoreEvals", () => {
     const smoke = report.results.find((r) => r.spec.includes("smoke"));
     expect(smoke?.correct).toBe(false);
     expect(smoke?.actual).toBe("trusted");
+    expect(report.metrics).toMatchObject({ truePositives: 1, falsePositives: 1, precision: 0.5, recall: 1 });
   });
 
   it("treats a missing verdict as incorrect", () => {

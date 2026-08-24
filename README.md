@@ -1,8 +1,9 @@
 # QASomething
 
 Task-driven exploratory QA for web applications. Point it at a local or staging
-environment, give it a focused goal, and it produces a reproducible Playwright
-result with evidence. A ticket is useful context, not a requirement.
+environment, give it a focused goal and an explicit oracle, and it produces a
+reproducible Playwright result with evidence. A ticket is useful context, not a
+requirement: its acceptance criteria can be distilled into the task oracle.
 
 QASomething uses an AI coding loop to explore, but a deterministic harness owns
 the verdict. The model cannot turn `done` into a green check by itself.
@@ -63,13 +64,21 @@ A task is deliberately small and auditable:
     "storageState": ".qa-agent/auth/default.json"
   },
   "oracle": "One submission creates exactly one persistent task.",
+  "business": {
+    "flow": "create",
+    "capability": "Create a task",
+    "tags": ["crud", "regression"]
+  },
+  "risk": { "impact": 3, "probability": 2, "areas": ["tasks"] },
+  "execution": { "projects": ["Desktop Chrome", "Mobile Chrome"] },
   "attempts": 2,
   "evidence": {
     "required": ["ui", "network", "console", "screenshot"]
   },
   "safety": {
     "allow": ["read", "create_test_data", "modify_test_data", "delete_test_data"],
-    "deny": ["external_message", "payment", "user_admin"]
+    "deny": ["external_message", "payment", "user_admin"],
+    "maxRequests": 150
   }
 }
 ```
@@ -77,6 +86,11 @@ A task is deliberately small and auditable:
 `task explore` authors a semantic `sequence.json`. The harness compiles it into
 `tests/qa-generated/<task-id>.spec.ts`, captures runtime evidence, repeats it in
 clean browser sessions, and minimizes consistently failing sequences.
+
+For a passing task it also compiles a `*.mutation.spec.ts` sibling. The agent
+must mutate the behavior at the app boundary (normally with a Playwright route),
+and the original oracle must fail on every clean mutation attempt. A task is not
+accepted as `verified` when that proof remains green.
 
 Run an existing task spec without an AI model:
 
@@ -87,7 +101,58 @@ node dist/index.js task run \
   --json
 ```
 
-For `task run`, the task must contain a repo-relative `spec`.
+For `task run`, the task must contain repo-relative `spec` and `mutationSpec`
+paths. A passing task without its mutation proof is inconclusive, never
+`verified`; the runner saves independent mutation attempts beside the normal
+ones.
+Likewise, a task without an explicit `oracle` can produce exploration evidence,
+but cannot be classified as `verified`.
+
+### Business coverage, matrix, and visual regression
+
+Tasks can be classified as `authentication`, `checkout`, `authorization`, CRUD,
+`error_handling`, or `regression`. `task catalog` lists the task portfolio in
+descending impact × probability order, so CI can prioritize critical flows:
+
+```bash
+node dist/index.js task catalog --repo /path/to/app
+node dist/index.js task matrix --repo /path/to/app --file qa-tasks/checkout.json
+```
+
+`task matrix` runs the same trusted task for every named Playwright project in
+`execution.projects` (for example Chromium, Firefox, WebKit, and a mobile
+viewport). Every profile must independently pass its clean and mutation runs.
+It writes a review-ready matrix report under `.qa-agent/matrix-runs/`.
+
+Structured oracles support URL, visible text, input values, expected network
+responses, absence of page errors, and visual baselines. A visual baseline is
+intentional and reviewed like any other test fixture:
+
+```json
+{ "kind": "visual_snapshot", "name": "checkout.png", "maxDiffPixels": 0 }
+```
+
+Bootstrap or approve a new baseline with Playwright's explicit review command,
+then commit the resulting `*-snapshots/*.png` file:
+
+```bash
+npx playwright test qa-generated/checkout.spec.ts --update-snapshots
+```
+
+For APIs, use the existing contract runner against the source OpenAPI/GraphQL
+contract; it tests positive and negative generated cases and preserves concrete
+reproductions for violations:
+
+```bash
+node dist/index.js api --repo /path/to/app --spec openapi.yaml --url https://staging.example.test
+```
+
+Sequences may include semantic `cleanup` actions. They execute after screenshot
+and evidence capture whether the oracle passes or fails; a cleanup failure turns
+an otherwise passing task into a failed run so test data cannot silently leak.
+After `task explore`, the replay-ready manifest is written to
+`.qa-agent/task-work/<task-id>/task.generated.json`; pass that file directly to
+`task run` to rerun the generated spec and its mutation proof.
 
 ## Example: finding a duplicate-submit bug
 
@@ -187,16 +252,30 @@ Artifacts live under:
   that was already dirty.
 - Every semantic action has a risk category. Explicit deny wins over allow.
 - Payments, external messages, and user administration are denied by default.
+- The semantic action's code is screened too: a `read` action cannot disguise a
+  payment, an external message, user administration, or navigation to an
+  unrelated host. Assertions receive the same screening.
+- Agent shell commands may only contain local HTTP URLs. Remote Git operations,
+  package installation, and recursive deletion are blocked during a run; install
+  dependencies before invoking the agent.
 - Blocked or inconclusive tasks return exit code `2`; reproducible behavior
   failures return `1`; verified tasks return `0`.
 - Use test or staging environments. Do not point exploratory write tasks at
   production.
+- `safety.maxRequests` gives a task an explicit browser-request budget. The
+  generated assertion and saved evidence make accidental staging load visible.
+- Run artifacts contain clickable attempt logs, a task report, mutation proof,
+  risk/business context, and matrix summaries for release review.
 
 ## Existing capabilities
 
 The earlier casebook workflow remains available for ticket-oriented planning,
 traceability, triage, reporting, mutation gates, and Schemathesis API contract
-testing. Run `node dist/index.js --help` for all commands.
+testing. `pnpm evals` continuously scores the trust gates against labeled,
+executable fixture suites. Real agent-quality evaluation additionally requires
+a reviewed corpus of product tasks and their expected sequences; the runner
+never pretends those labels exist when they do not. Run `node dist/index.js
+--help` for all commands.
 
 ## Development
 

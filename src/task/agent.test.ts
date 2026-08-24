@@ -41,6 +41,11 @@ async function writeSequence(
       title: "creates one task",
       actions,
       assertion: { intent: "One task exists", code: "await expect(page).toHaveURL(/tasks/)" },
+      mutation: {
+        intent: "Reject task creation",
+        code: 'await page.route("**/api/tasks", route => route.fulfill({ status: 500 }))',
+        risk: "read",
+      },
     }),
   );
 }
@@ -92,9 +97,9 @@ describe("runTaskAgent completion gate", () => {
     const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-agent-task-"));
     await writeSequence(repoPath);
     let runnerCalls = 0;
-    const runner: TestRunner = async () => {
+    const runner: TestRunner = async (spec) => {
       runnerCalls++;
-      return run(true);
+      return run(!spec.endsWith(".mutation.spec.ts"));
     };
     const result = await runTaskAgent({
       model: new DoneModel(),
@@ -105,7 +110,13 @@ describe("runTaskAgent completion gate", () => {
 
     expect(result.finished).toBe(true);
     expect(result.verification?.status).toBe("passed");
-    expect(runnerCalls).toBe(2);
+    expect(runnerCalls).toBe(4);
+    expect(result.mutation?.status).toBe("meaningful");
+    const replayTask = JSON.parse(await readFile(path.join(repoPath, result.replayTaskFile), "utf8"));
+    expect(replayTask).toMatchObject({
+      spec: "tests/qa-generated/create-task.spec.ts",
+      mutationSpec: "tests/qa-generated/create-task.mutation.spec.ts",
+    });
   });
 
   it("does not finish on inconclusive verification", async () => {
@@ -136,6 +147,22 @@ describe("runTaskAgent completion gate", () => {
     expect(result.finished).toBe(true);
     expect(result.verification?.status).toBe("failed");
     expect(result.verification?.attempts).toHaveLength(2);
+    expect(result.mutation).toBeUndefined();
+  });
+
+  it("does not accept a passing task when its mutation also passes", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-agent-task-"));
+    await writeSequence(repoPath);
+    const model = new DoneModel();
+    const result = await runTaskAgent({
+      model,
+      task: { ...task, attempts: 1 },
+      config: resolveConfig(repoPath, { maxSteps: 2 }),
+      runner: async () => run(true),
+    });
+
+    expect(result.finished).toBe(false);
+    expect(model.calls).toBe(2);
   });
 
   it("minimizes a failure and re-verifies the generated final spec", async () => {

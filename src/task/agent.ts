@@ -7,7 +7,7 @@ import { runCommand } from "../shell.js";
 import type { Message, Step } from "../types.js";
 import type { TestRunner } from "../verify.js";
 import { isGitRepo, listChangedPaths, revertDisallowedChanges } from "../workspace.js";
-import { runTask, type TaskRunResult } from "./runner.js";
+import { runTask, type TaskMutationProof, type TaskRunResult } from "./runner.js";
 import type { QATask } from "./schema.js";
 import { compileSequence, loadTaskSequence, type TaskSequence } from "./sequence.js";
 import { shrinkSequence, type ShrinkResult } from "./shrinker.js";
@@ -16,8 +16,10 @@ import { evaluateSafety } from "./safety.js";
 export interface TaskAgentResult {
   finished: boolean;
   finalSpec: string;
+  replayTaskFile: string;
   steps: Step[];
   verification?: TaskRunResult;
+  mutation?: TaskMutationProof;
   shrink?: ShrinkResult;
   stoppedReason?: string;
   workspaceDir: string;
@@ -49,8 +51,8 @@ Actor: ${task.target?.actor ?? "default"}
 Repository: ${repoPath}
 
 Write exploratory probes under ${workspaceDir}/. Before finishing, write ${workspaceDir}/sequence.json with this shape:
-{"version":1,"taskId":"${task.id}","title":"...","actions":[{"id":"navigate","intent":"...","code":"await page.goto(...)","required":true,"risk":"read"}],"assertion":{"intent":"...","code":"await expect(...)"}}
-Use one semantic user action per entry and classify its risk. Mark only indispensable setup as required. The harness enforces the safety policy, compiles this sequence into ${finalSpec}, verifies it, and minimizes it when it fails. Begin by orienting yourself and inspecting the app/test configuration.`;
+{"version":1,"taskId":"${task.id}","title":"...","actions":[{"id":"navigate","intent":"...","code":"await page.goto(...)","required":true,"risk":"read"}],"assertion":{"intent":"...","code":"await expect(...)"},"cleanup":[{"id":"remove-test-data","intent":"Remove only data created by this task","code":"await ...","required":true,"risk":"delete_test_data"}],"mutation":{"intent":"Break the behavior through the app boundary","code":"await page.route('**/api/example', route => route.fulfill({status:500}))","risk":"read"}}
+Use one semantic user action per entry and classify its risk. When the task creates or changes test data, add cleanup actions that remove only that data; cleanup runs after evidence capture even when the oracle fails. The mutation must alter the app behavior (normally with a local Playwright route) before the same actions and oracle run; it must not throw a synthetic failure or weaken the assertion. Mark only indispensable setup as required. The harness enforces the safety policy, compiles a normal and a mutation spec, verifies them independently, and minimizes a reproducible finding. Begin by orienting yourself and inspecting the app/test configuration.`;
 }
 
 async function exists(file: string): Promise<boolean> {
@@ -89,9 +91,12 @@ export async function runTaskAgent(args: {
   const { model, task, config, runner, onStep } = args;
   const finalSpec = `tests/qa-generated/${task.id}.spec.ts`;
   const finalSpecAbs = path.join(config.repoPath, finalSpec);
+  const mutationSpec = `tests/qa-generated/${task.id}.mutation.spec.ts`;
+  const mutationSpecAbs = path.join(config.repoPath, mutationSpec);
   const workspaceDir = `.qa-agent/task-work/${task.id}`;
   const workspaceAbs = path.join(config.repoPath, workspaceDir);
   const sequenceFile = path.join(workspaceAbs, "sequence.json");
+  const replayTaskFile = path.join(workspaceAbs, "task.generated.json");
   await mkdir(workspaceAbs, { recursive: true });
   await writeFile(path.join(workspaceAbs, "task.json"), JSON.stringify(task, null, 2) + "\n", "utf8");
 
@@ -142,17 +147,30 @@ export async function runTaskAgent(args: {
         });
         continue;
       }
+      if (sequence.mutation === undefined) {
+        messages.push({
+          role: "user",
+          content:
+            "[COMPLETION GATE] sequence.json needs a mutation object. Describe a Playwright route or equivalent app-boundary change that should make the same oracle fail; do not use a synthetic assertion failure.",
+        });
+        continue;
+      }
       await mkdir(path.dirname(finalSpecAbs), { recursive: true });
       const compileOptions = {
         ...(task.target?.baseUrl === undefined ? {} : { baseUrl: task.target.baseUrl }),
         ...(task.target?.storageState === undefined ? {} : { storageState: task.target.storageState }),
+        ...(task.oracleChecks === undefined ? {} : { oracleChecks: task.oracleChecks }),
+        ...(task.safety?.maxRequests === undefined ? {} : { maxRequests: task.safety.maxRequests }),
       };
       await writeFile(finalSpecAbs, compileSequence(sequence, compileOptions), "utf8");
+      await writeFile(mutationSpecAbs, compileSequence(sequence, compileOptions, true), "utf8");
       const verificationTask: QATask = {
         ...task,
         spec: finalSpec,
+        mutationSpec,
         evidence: task.evidence ?? { required: ["ui", "screenshot"] },
       };
+      await writeFile(replayTaskFile, JSON.stringify(verificationTask, null, 2) + "\n", "utf8");
 
       const verificationRuns: Awaited<ReturnType<TestRunner>>[] = [];
       let verification = await runTask({
@@ -168,7 +186,10 @@ export async function runTaskAgent(args: {
       if (verification.status === "inconclusive") {
         messages.push({
           role: "user",
-          content: `[COMPLETION GATE] Independent verification was inconclusive: ${verification.reason}. Inspect ${verification.artifactsDir} and repair the final spec or environment.`,
+          content:
+            verification.mutation?.status === "not_meaningful"
+              ? `[MUTATION GATE] ${verification.reason} Strengthen the assertion or write a mutation that actually breaks the behavior, then continue.`
+              : `[COMPLETION GATE] Independent verification was inconclusive: ${verification.reason}. Inspect ${verification.artifactsDir} and repair the final spec or environment.`,
         });
         continue;
       }
@@ -212,8 +233,10 @@ export async function runTaskAgent(args: {
       return {
         finished: true,
         finalSpec,
+        replayTaskFile: path.relative(config.repoPath, replayTaskFile).split(path.sep).join("/"),
         steps,
         verification,
+        ...(verification.mutation === undefined ? {} : { mutation: verification.mutation }),
         ...(shrink === undefined ? {} : { shrink }),
         workspaceDir,
       };
@@ -256,6 +279,7 @@ export async function runTaskAgent(args: {
   return {
     finished: false,
     finalSpec,
+    replayTaskFile: path.relative(config.repoPath, replayTaskFile).split(path.sep).join("/"),
     steps,
     stoppedReason: `Reached the step limit (${config.maxSteps}) without a conclusive final spec.`,
     workspaceDir,
