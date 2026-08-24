@@ -27,4 +27,7 @@ for (const r of report.results) {
 }
 console.log("═".repeat(64));
 console.log(`SCORE: ${report.passed}/${report.total}  (${Math.round(report.score * 100)}%)`);
+console.log(
+  `TRUST GATE: precision=${Math.round(report.metrics.precision * 100)}%  recall=${Math.round(report.metrics.recall * 100)}%  TP=${report.metrics.truePositives} FP=${report.metrics.falsePositives} TN=${report.metrics.trueNegatives} FN=${report.metrics.falseNegatives}`,
+);
 if (report.score < 1) process.exitCode = 1;

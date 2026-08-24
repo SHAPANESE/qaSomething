@@ -29,9 +29,20 @@ export const DEFAULT_BLOCKLIST: BlocklistRule[] = [
   { pattern: /\bchmod\s+-R\s+777\b/i, reason: "Recursive world-writable chmod is forbidden." },
   { pattern: /\b(crontab|at)\s/i, reason: "Scheduling commands is forbidden." },
   { pattern: /\bkillall\b|\bkill\s+-9\s+-1\b/i, reason: "Mass process kill is forbidden." },
+  {
+    pattern: /\b(?:Remove-Item|rmdir|rd|del)\b[^\n]*(?:-Recurse|\/s)\b/i,
+    reason: "Recursive delete is forbidden.",
+  },
+  {
+    pattern: /\bgit\s+(?:clone|fetch|pull|ls-remote)\b/i,
+    reason: "Fetching from remotes is forbidden â€” the agent works locally only.",
+  },
+  {
+    pattern: /\b(?:npm|pnpm|yarn)\s+(?:install|add|i)\b/i,
+    reason: "Installing packages is forbidden during an agent run. Prepare dependencies before starting.",
+  },
 ];
 
-const NETWORK_TOOL_RE = /\b(curl|wget|nc|ncat|telnet)\b/i;
 const URL_RE = /https?:\/\/([^\s/"']+)/gi;
 const LOCAL_HOSTS = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|::1|host\.docker\.internal)(:\d+)?$/i;
 
@@ -41,9 +52,10 @@ export interface ScreenResult {
 }
 
 /**
- * Decide whether a command is allowed to run. Network tools are permitted only
- * against local hosts so the agent can talk to the app-under-test but cannot
- * exfiltrate data or hit prod.
+ * Decide whether a command is allowed to run. Literal URLs are permitted only
+ * against local hosts, regardless of whether they appear in curl, Node, Python,
+ * or another interpreter. This keeps simple alternate-client tricks from
+ * bypassing the local-app boundary.
  */
 export function screenCommand(command: string, blocklist: BlocklistRule[] = DEFAULT_BLOCKLIST): ScreenResult {
   for (const rule of blocklist) {
@@ -52,15 +64,13 @@ export function screenCommand(command: string, blocklist: BlocklistRule[] = DEFA
     }
   }
 
-  if (NETWORK_TOOL_RE.test(command)) {
-    for (const match of command.matchAll(URL_RE)) {
-      const host = match[1] ?? "";
-      if (!LOCAL_HOSTS.test(host)) {
-        return {
-          allowed: false,
-          reason: `Network access to non-local host "${host}" is forbidden. The agent may only reach the local app-under-test.`,
-        };
-      }
+  for (const match of command.matchAll(URL_RE)) {
+    const host = match[1] ?? "";
+    if (!LOCAL_HOSTS.test(host)) {
+      return {
+        allowed: false,
+        reason: `Network access to non-local host "${host}" is forbidden. The agent may only reach the local app-under-test.`,
+      };
     }
   }
 

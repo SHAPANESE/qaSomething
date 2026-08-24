@@ -38,6 +38,7 @@ import { runTaskAgent } from "./task/agent.js";
 import { initializeProject } from "./init.js";
 import { compileSequence, loadTaskSequence } from "./task/sequence.js";
 import { evaluateSafety } from "./task/safety.js";
+import { rankByRisk } from "./task/risk.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CRITERIA = path.resolve(HERE, "..", "docs", "qa-senior-criteria.md");
@@ -332,6 +333,17 @@ interface TaskRunOpts {
   file: string;
   timeout?: number;
   json?: boolean;
+  project?: string;
+}
+
+interface TaskMatrixOpts extends Omit<TaskRunOpts, "project"> {
+  projects?: string;
+}
+
+interface TaskCatalogOpts {
+  repo: string;
+  dir?: string;
+  json?: boolean;
 }
 
 interface TaskExploreOpts extends TaskRunOpts {
@@ -354,6 +366,8 @@ async function taskCompileAction(opts: TaskCompileOpts): Promise<void> {
   const task = await loadTask(taskFile);
   const sequence = await loadTaskSequence(sequenceFile);
   if (sequence.taskId !== task.id) throw new Error(`Sequence taskId must match task ${task.id}.`);
+  if (task.oracle === undefined)
+    throw new Error("Task needs an explicit oracle before it can be compiled as trusted.");
   const violations = evaluateSafety(task, sequence);
   if (violations.length > 0) throw new Error(violations.map((item) => item.reason).join("\n"));
   const output = opts.output ?? `tests/qa-generated/${task.id}.spec.ts`;
@@ -362,16 +376,23 @@ async function taskCompileAction(opts: TaskCompileOpts): Promise<void> {
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error("Compiled spec must stay inside the repository.");
   }
+  if (!outputFile.endsWith(".spec.ts"))
+    throw new Error("Compiled spec must use the Playwright *.spec.ts suffix.");
+  if (sequence.mutation === undefined) {
+    throw new Error("Sequence needs a mutation object before it can be compiled into a trusted task.");
+  }
   await mkdir(path.dirname(outputFile), { recursive: true });
-  await writeFile(
-    outputFile,
-    compileSequence(sequence, {
-      ...(task.target?.baseUrl === undefined ? {} : { baseUrl: task.target.baseUrl }),
-      ...(task.target?.storageState === undefined ? {} : { storageState: task.target.storageState }),
-    }),
-    "utf8",
-  );
+  const compileOptions = {
+    ...(task.target?.baseUrl === undefined ? {} : { baseUrl: task.target.baseUrl }),
+    ...(task.target?.storageState === undefined ? {} : { storageState: task.target.storageState }),
+    ...(task.oracleChecks === undefined ? {} : { oracleChecks: task.oracleChecks }),
+    ...(task.safety?.maxRequests === undefined ? {} : { maxRequests: task.safety.maxRequests }),
+  };
+  await writeFile(outputFile, compileSequence(sequence, compileOptions), "utf8");
+  const mutationFile = outputFile.replace(/\.spec\.ts$/, ".mutation.spec.ts");
+  await writeFile(mutationFile, compileSequence(sequence, compileOptions, true), "utf8");
   console.log(`✔ compiled ${relative.split(path.sep).join("/")}`);
+  console.log(`  mutation: ${path.relative(repoPath, mutationFile).split(path.sep).join("/")}`);
 }
 
 async function taskRunAction(opts: TaskRunOpts): Promise<void> {
@@ -384,8 +405,9 @@ async function taskRunAction(opts: TaskRunOpts): Promise<void> {
   const result = await runTask({
     repoPath,
     task,
-    runner: playwrightRunner(repoPath, config.commandTimeoutMs),
+    runner: playwrightRunner(repoPath, config.commandTimeoutMs, opts.project),
     allowedWriteDirs: config.allowedWriteDirs,
+    ...(opts.project === undefined ? {} : { executionProfile: opts.project }),
   });
 
   if (opts.json === true) {
@@ -403,6 +425,107 @@ async function taskRunAction(opts: TaskRunOpts): Promise<void> {
   if (result.status === "blocked" || result.status === "inconclusive") process.exitCode = 2;
 }
 
+async function taskMatrixAction(opts: TaskMatrixOpts): Promise<void> {
+  const repoPath = path.resolve(opts.repo);
+  const taskFile = path.isAbsolute(opts.file) ? opts.file : path.join(repoPath, opts.file);
+  const task = await loadTask(taskFile);
+  const projects =
+    opts.projects
+      ?.split(",")
+      .map((value) => value.trim())
+      .filter(Boolean) ??
+    task.execution?.projects ??
+    [];
+  if (projects.length === 0) {
+    throw new Error("Task matrix needs --projects chromium,firefox,... or task.execution.projects.");
+  }
+  const overrides: Partial<RunConfig> = {};
+  if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
+  const { config } = await buildConfig(repoPath, overrides);
+  const results = [];
+  for (const project of projects) {
+    results.push(
+      await runTask({
+        repoPath,
+        task,
+        runner: playwrightRunner(repoPath, config.commandTimeoutMs, project),
+        allowedWriteDirs: config.allowedWriteDirs,
+        executionProfile: project,
+      }),
+    );
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const artifactDir = path.join(repoPath, ".qa-agent", "matrix-runs", `${stamp}-${task.id}`);
+  await mkdir(artifactDir, { recursive: true });
+  const summary = {
+    schemaVersion: 1,
+    taskId: task.id,
+    projects,
+    status: results.every((result) => result.status === "passed")
+      ? "passed"
+      : results.some((result) => result.status === "failed")
+        ? "failed"
+        : "inconclusive",
+    results,
+  };
+  await writeFile(
+    path.join(artifactDir, "matrix-result.json"),
+    JSON.stringify(summary, null, 2) + "\n",
+    "utf8",
+  );
+  const markdown = [
+    `# QA matrix: ${task.id}`,
+    "",
+    `- **Business flow:** ${task.business?.flow ?? "unspecified"}`,
+    `- **Projects:** ${projects.map((project) => `\`${project}\``).join(", ")}`,
+    "",
+    "## Results",
+    "",
+    ...results.map(
+      (result) =>
+        `- ${result.executionProfile}: **${result.status}** (${result.classification}) — ${result.reason}`,
+    ),
+    "",
+  ].join("\n");
+  await writeFile(path.join(artifactDir, "matrix-report.md"), markdown, "utf8");
+  if (opts.json === true) console.log(JSON.stringify(summary, null, 2));
+  else console.log(markdown + `artifacts: ${path.relative(repoPath, artifactDir).split(path.sep).join("/")}`);
+  if (summary.status === "failed") process.exitCode = 1;
+  if (summary.status === "inconclusive") process.exitCode = 2;
+}
+
+async function taskCatalogAction(opts: TaskCatalogOpts): Promise<void> {
+  const repoPath = path.resolve(opts.repo);
+  const taskDir = path.resolve(repoPath, opts.dir ?? "qa-tasks");
+  const relative = path.relative(repoPath, taskDir);
+  if (relative.startsWith("..") || path.isAbsolute(relative))
+    throw new Error("Task catalog directory must stay inside the repository.");
+  const entries = await readdir(taskDir, { recursive: true });
+  const tasks = [];
+  for (const entry of entries) {
+    const name = String(entry);
+    if (!name.endsWith(".json") || name.endsWith(".sequence.json")) continue;
+    const file = path.join(taskDir, name);
+    tasks.push({ file: path.relative(repoPath, file).split(path.sep).join("/"), task: await loadTask(file) });
+  }
+  const ranked = rankByRisk(tasks.map((entry) => ({ ...entry, risk: entry.task.risk }))).map(
+    ({ item, score }) => ({ ...item, score }),
+  );
+  if (opts.json === true) {
+    console.log(JSON.stringify(ranked, null, 2));
+    return;
+  }
+  console.log("Risk-prioritized QA task catalog\n");
+  for (const entry of ranked) {
+    const flow = entry.task.business?.flow ?? "unspecified";
+    const projects = entry.task.execution?.projects.join(", ") ?? "default";
+    console.log(
+      `${entry.score.toString().padStart(2, " ")}  ${entry.task.id}  [${flow}]  projects=${projects}`,
+    );
+    console.log(`    ${entry.task.goal} — ${entry.file}`);
+  }
+}
+
 async function taskExploreAction(opts: TaskExploreOpts): Promise<void> {
   if (opts.subscription !== true && !process.env["ANTHROPIC_API_KEY"]) {
     console.error("Error: ANTHROPIC_API_KEY is not set. Export it, or use --subscription.");
@@ -412,6 +535,13 @@ async function taskExploreAction(opts: TaskExploreOpts): Promise<void> {
   const repoPath = path.resolve(opts.repo);
   const taskFile = path.isAbsolute(opts.file) ? opts.file : path.join(repoPath, opts.file);
   const task = await loadTask(taskFile);
+  if (task.oracle === undefined) {
+    console.error(
+      "Error: task explore needs an explicit oracle; add oracle to the task JSON before exploring.",
+    );
+    process.exitCode = 2;
+    return;
+  }
   const overrides: Partial<RunConfig> = {};
   if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
   if (opts.maxSteps !== undefined) overrides.maxSteps = opts.maxSteps;
@@ -432,6 +562,9 @@ async function taskExploreAction(opts: TaskExploreOpts): Promise<void> {
       `\n${result.verification.status.toUpperCase()} ${task.id} (${result.verification.classification})`,
     );
     console.log(`   final spec: ${result.finalSpec}`);
+    if (result.mutation)
+      console.log(`   mutation proof: ${result.mutation.spec} (${result.mutation.status})`);
+    console.log(`   replay task: ${result.replayTaskFile}`);
     console.log(`   ${result.verification.reason}`);
     if (result.shrink && result.shrink.removedActionIds.length > 0) {
       console.log(`   minimized: removed ${result.shrink.removedActionIds.join(", ")}`);
@@ -607,7 +740,29 @@ taskCommand
   .requiredOption("-f, --file <path>", "Task JSON file (repo-relative or absolute)")
   .option("--timeout <ms>", "Per-attempt timeout in ms", (v) => Number.parseInt(v, 10))
   .option("--json", "Emit the structured task result")
+  .option("--project <name>", "Playwright project to execute (for one browser/device profile)")
   .action(taskRunAction);
+
+taskCommand
+  .command("matrix")
+  .description("Run one task across configured Playwright browser/device projects")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .requiredOption("-f, --file <path>", "Task JSON file")
+  .option(
+    "--projects <list>",
+    "Comma-separated Playwright project names (defaults to task.execution.projects)",
+  )
+  .option("--timeout <ms>", "Per-attempt timeout in ms", (v) => Number.parseInt(v, 10))
+  .option("--json", "Emit the structured matrix result")
+  .action(taskMatrixAction);
+
+taskCommand
+  .command("catalog")
+  .description("List business QA tasks ordered by impact × probability")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .option("-d, --dir <path>", "Task directory (default: qa-tasks)")
+  .option("--json", "Emit the ranked task catalog as JSON")
+  .action(taskCatalogAction);
 
 taskCommand
   .command("explore")
@@ -623,7 +778,7 @@ taskCommand
 
 taskCommand
   .command("compile")
-  .description("Compile a reviewed semantic sequence into an instrumented Playwright spec")
+  .description("Compile a reviewed semantic sequence into normal and mutation Playwright specs")
   .requiredOption("-r, --repo <path>", "Path to the repo under test")
   .requiredOption("-f, --file <path>", "Task JSON file")
   .requiredOption("-s, --sequence <path>", "Semantic sequence JSON file")

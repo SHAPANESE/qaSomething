@@ -3,11 +3,17 @@
   "id": "create-task-evidence",
   "goal": "Create one task and capture UI, network, console, and screenshot evidence",
   "spec": "tests/qa-generated/create-task-evidence.spec.ts",
+  "mutationSpec": "tests/qa-generated/create-task-evidence.mutation.spec.ts",
   "target": {
     "baseUrl": "http://127.0.0.1:3200",
     "actor": "default"
   },
   "oracle": "One submission creates exactly one visible task.",
+  "oracleChecks": [
+    { "kind": "text_visible", "text": "Evidence task", "exact": true },
+    { "kind": "network_request", "method": "POST", "path": "/api/tasks", "status": 201 },
+    { "kind": "no_page_errors" }
+  ],
   "attempts": 2,
   "evidence": {
     "required": ["ui", "network", "console", "screenshot"]

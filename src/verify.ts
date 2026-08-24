@@ -39,6 +39,8 @@ export interface RuntimeEvidence {
   responses: Array<{ method: string; url: string; status: number }>;
   console: Array<{ type: string; text: string }>;
   pageErrors: string[];
+  cleanupErrors?: string[];
+  requestCount?: number;
 }
 
 const EVIDENCE_MARKER = "__QA_EVIDENCE__";
@@ -414,18 +416,22 @@ export async function verifyAll(
  * resolves the repo's own Playwright binary and handles Windows `.cmd`
  * resolution, so no shell is needed at all.
  */
-export function playwrightRunner(repoPath: string, timeoutMs: number): TestRunner {
+export function playwrightRunner(repoPath: string, timeoutMs: number, project?: string): TestRunner {
   return async (specFile) => {
     const rel = path.relative(repoPath, specFile).split(path.sep).join("/") || specFile;
-    const res = await execa("playwright", ["test", rel, "--reporter=json"], {
-      cwd: repoPath,
-      timeout: timeoutMs,
-      reject: false,
-      preferLocal: true,
-      localDir: repoPath,
-      // Keep the JSON report on stdout even if it's large.
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const res = await execa(
+      "playwright",
+      ["test", rel, "--reporter=json", ...(project === undefined ? [] : ["--project", project])],
+      {
+        cwd: repoPath,
+        timeout: timeoutMs,
+        reject: false,
+        preferLocal: true,
+        localDir: repoPath,
+        // Keep the JSON report on stdout even if it's large.
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
     const output = `${res.stdout ?? ""}\n${res.stderr ?? ""}`;
     return interpretRun(typeof res.exitCode === "number" ? res.exitCode : null, output);
   };

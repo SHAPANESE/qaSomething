@@ -61,10 +61,12 @@ describe("runTask", () => {
       version: 1,
       id: "create-task",
       goal: "Create a task and verify persistence",
+      oracle: "One task is created and visible.",
       spec: "tests/create-task.spec.ts",
+      mutationSpec: "tests/create-task.mutation.spec.ts",
       attempts: 2,
     };
-    const runner: TestRunner = async () => outcome(true);
+    const runner: TestRunner = async (spec) => outcome(!spec.endsWith(".mutation.spec.ts"));
     const times = [new Date("2026-08-10T12:00:00.000Z"), new Date("2026-08-10T12:00:02.000Z")];
     const result = await runTask({
       repoPath,
@@ -80,6 +82,46 @@ describe("runTask", () => {
     expect(await readFile(path.join(repoPath, result.artifactsDir, "attempt-1.log"), "utf8")).toContain(
       "1 passed",
     );
+  });
+
+  it("does not verify a passing task without a mutation proof", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-task-mutation-required-"));
+    await mkdir(path.join(repoPath, "tests"));
+    const result = await runTask({
+      repoPath,
+      task: {
+        version: 1,
+        id: "create-task",
+        goal: "Create a task",
+        oracle: "One task is created.",
+        spec: "tests/create-task.spec.ts",
+      },
+      runner: async () => outcome(true),
+    });
+
+    expect(result.status).toBe("inconclusive");
+    expect(result.classification).toBe("insufficient_evidence");
+    expect(result.reason).toContain("No mutationSpec");
+  });
+
+  it("does not verify a passing task without an explicit oracle", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-task-oracle-required-"));
+    await mkdir(path.join(repoPath, "tests"));
+    const result = await runTask({
+      repoPath,
+      task: {
+        version: 1,
+        id: "create-task",
+        goal: "Create a task",
+        spec: "tests/create-task.spec.ts",
+        mutationSpec: "tests/create-task.mutation.spec.ts",
+      },
+      runner: async (spec) => outcome(!spec.endsWith(".mutation.spec.ts")),
+    });
+
+    expect(result.status).toBe("inconclusive");
+    expect(result.classification).toBe("insufficient_evidence");
+    expect(result.reason).toContain("No explicit oracle");
   });
 
   it("does not execute a task explicitly blocked by safety", async () => {
@@ -106,6 +148,56 @@ describe("runTask", () => {
     expect(calls).toBe(0);
   });
 
+  it("requires the sibling mutation spec to fail before calling a passing task verified", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-task-mutation-"));
+    await mkdir(path.join(repoPath, "tests"));
+    const task: QATask = {
+      version: 1,
+      id: "create-task",
+      goal: "Create a task",
+      oracle: "One task is created.",
+      spec: "tests/create-task.spec.ts",
+      mutationSpec: "tests/create-task.mutation.spec.ts",
+      attempts: 2,
+    };
+    const result = await runTask({
+      repoPath,
+      task,
+      runner: async (spec) => outcome(!spec.endsWith(".mutation.spec.ts")),
+    });
+
+    expect(result.status).toBe("passed");
+    expect(result.mutation).toMatchObject({
+      status: "meaningful",
+      attempts: [{ passed: false }, { passed: false }],
+    });
+    expect(
+      await readFile(path.join(repoPath, result.artifactsDir, "mutation-attempt-1.log"), "utf8"),
+    ).toContain("1 failed");
+  });
+
+  it("does not call a task verified when its mutation still passes", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-task-mutation-"));
+    await mkdir(path.join(repoPath, "tests"));
+    const result = await runTask({
+      repoPath,
+      task: {
+        version: 1,
+        id: "create-task",
+        goal: "Create a task",
+        oracle: "One task is created.",
+        spec: "tests/create-task.spec.ts",
+        mutationSpec: "tests/create-task.mutation.spec.ts",
+        attempts: 1,
+      },
+      runner: async () => outcome(true),
+    });
+
+    expect(result.status).toBe("inconclusive");
+    expect(result.classification).toBe("insufficient_evidence");
+    expect(result.mutation?.status).toBe("not_meaningful");
+  });
+
   it("reverts app-source writes made while a generated spec executes", async () => {
     const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-task-guard-"));
     await mkdir(path.join(repoPath, "tests"));
@@ -119,13 +211,16 @@ describe("runTask", () => {
       version: 1,
       id: "guarded",
       goal: "Do not modify source",
+      oracle: "The app source remains unchanged.",
       spec: "tests/guarded.spec.ts",
+      mutationSpec: "tests/guarded.mutation.spec.ts",
       attempts: 1,
     };
     const result = await runTask({
       repoPath,
       task: guardedTask,
-      runner: async () => {
+      runner: async (spec) => {
+        if (spec.endsWith(".mutation.spec.ts")) return outcome(false);
         await writeFile(path.join(repoPath, "server.mjs"), "export const injected = true;\n");
         return outcome(true);
       },

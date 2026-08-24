@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.use({"baseURL":"http://127.0.0.1:3200"});
 
 
-test("creates exactly one visible task", async ({ page }, testInfo) => {
+test("creates exactly one visible task [mutation]", async ({ page }, testInfo) => {
   const qaEvidence = {
     channels: ["ui", "network", "console"] as Array<"ui" | "network" | "console" | "screenshot">,
     oracleReached: false,
@@ -23,6 +23,9 @@ test("creates exactly one visible task", async ({ page }, testInfo) => {
   page.on("pageerror", error => qaEvidence.pageErrors.push(error.message));
   let oraclePassed = false;
   try {
+
+    // mutation â€” Reject task creation at the API boundary
+  await page.route("**/api/tasks", async route => { if (route.request().method() === "POST") await route.fulfill({ status: 500, contentType: "application/json", body: '{\"error\":\"mutated\"}' }); else await route.continue(); })
 
   // action:navigate — Open the task list
   await page.goto("/")

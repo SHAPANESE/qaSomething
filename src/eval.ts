@@ -31,6 +31,16 @@ export interface EvalReport {
   passed: number;
   total: number;
   score: number;
+  metrics: EvalMetrics;
+}
+
+export interface EvalMetrics {
+  truePositives: number;
+  falsePositives: number;
+  trueNegatives: number;
+  falseNegatives: number;
+  precision: number;
+  recall: number;
 }
 
 const norm = (s: string): string => s.split("\\").join("/");
@@ -49,7 +59,24 @@ export function scoreEvals(cases: EvalCase[], verdicts: TestVerdict[]): EvalRepo
     };
   });
   const passed = results.filter((r) => r.correct).length;
-  return { results, passed, total: results.length, score: results.length ? passed / results.length : 0 };
+  const truePositives = results.filter((r) => r.expected === "trusted" && r.actual === "trusted").length;
+  const falsePositives = results.filter((r) => r.expected === "rejected" && r.actual === "trusted").length;
+  const trueNegatives = results.filter((r) => r.expected === "rejected" && r.actual === "rejected").length;
+  const falseNegatives = results.filter((r) => r.expected === "trusted" && r.actual === "rejected").length;
+  return {
+    results,
+    passed,
+    total: results.length,
+    score: results.length ? passed / results.length : 0,
+    metrics: {
+      truePositives,
+      falsePositives,
+      trueNegatives,
+      falseNegatives,
+      precision: truePositives + falsePositives ? truePositives / (truePositives + falsePositives) : 1,
+      recall: truePositives + falseNegatives ? truePositives / (truePositives + falseNegatives) : 1,
+    },
+  };
 }
 
 /** Run the gates over the eval set and score. Runner is injectable for testing. */

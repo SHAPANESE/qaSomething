@@ -8,7 +8,7 @@ export function classifyFinding(task: QATask, status: TaskStatus, reason: string
   if (status === "passed") return "verified";
   if (status === "blocked") return "blocked";
   if (status === "inconclusive") {
-    return /evidence/i.test(reason) ? "insufficient_evidence" : "environment_issue";
+    return /evidence|mutat|oracle/i.test(reason) ? "insufficient_evidence" : "environment_issue";
   }
   return task.oracle !== undefined ? "confirmed_bug" : "probable_bug";
 }
