@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { resolveConfig, type RunConfig } from "./config.js";
 import { runAgent } from "./loop.js";
@@ -32,13 +33,19 @@ import {
   type GenerationMode,
   type SchemathesisOptions,
 } from "./api/schemathesis.js";
-import { loadTask } from "./task/schema.js";
+import { loadTask, type QATask } from "./task/schema.js";
 import { runTask } from "./task/runner.js";
 import { runTaskAgent } from "./task/agent.js";
 import { initializeProject } from "./init.js";
 import { compileSequence, loadTaskSequence } from "./task/sequence.js";
 import { evaluateSafety } from "./task/safety.js";
 import { rankByRisk } from "./task/risk.js";
+import type {
+  ApprovalHandler,
+  ApprovalRequest,
+  ApprovalResponse,
+  SupervisionMode,
+} from "./task/supervision.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CRITERIA = path.resolve(HERE, "..", "docs", "qa-senior-criteria.md");
@@ -350,6 +357,9 @@ interface TaskExploreOpts extends TaskRunOpts {
   model?: string;
   maxSteps?: number;
   subscription?: boolean;
+  supervised?: boolean;
+  approvalMode?: string;
+  reviewer?: string;
 }
 
 interface TaskCompileOpts {
@@ -534,7 +544,28 @@ async function taskExploreAction(opts: TaskExploreOpts): Promise<void> {
   }
   const repoPath = path.resolve(opts.repo);
   const taskFile = path.isAbsolute(opts.file) ? opts.file : path.join(repoPath, opts.file);
-  const task = await loadTask(taskFile);
+  const loadedTask = await loadTask(taskFile);
+  const supervisionModes: SupervisionMode[] = ["autonomous", "approve_risky", "approve_all"];
+  if (opts.approvalMode !== undefined && !supervisionModes.includes(opts.approvalMode as SupervisionMode)) {
+    throw new Error(`--approval-mode must be one of ${supervisionModes.join(", ")}.`);
+  }
+  const requestedMode =
+    (opts.approvalMode as SupervisionMode | undefined) ??
+    (opts.supervised === true ? "approve_risky" : loadedTask.supervision?.mode);
+  const task: QATask =
+    requestedMode === undefined
+      ? loadedTask
+      : {
+          ...loadedTask,
+          supervision: {
+            mode: requestedMode,
+            checkpointBeforeExecution: loadedTask.supervision?.checkpointBeforeExecution ?? true,
+            checkpointBeforeFinding: loadedTask.supervision?.checkpointBeforeFinding ?? true,
+            ...((opts.reviewer ?? loadedTask.supervision?.reviewer) === undefined
+              ? {}
+              : { reviewer: opts.reviewer ?? loadedTask.supervision?.reviewer }),
+          },
+        };
   if (task.oracle === undefined) {
     console.error(
       "Error: task explore needs an explicit oracle; add oracle to the task JSON before exploring.",
@@ -548,12 +579,17 @@ async function taskExploreAction(opts: TaskExploreOpts): Promise<void> {
   if (opts.model !== undefined) overrides.modelId = opts.model;
   const { config } = await buildConfig(repoPath, overrides);
   const model = opts.subscription === true ? claudeCliModel() : createAnthropicModel(config.modelId);
+  const approvalHandler =
+    task.supervision?.mode !== undefined && task.supervision.mode !== "autonomous" && opts.json !== true
+      ? interactiveApprovalHandler(task.supervision.reviewer)
+      : undefined;
   const result = await runTaskAgent({
     model,
     task,
     config,
     runner: playwrightRunner(repoPath, config.commandTimeoutMs),
     ...(opts.json === true ? {} : { onStep: renderStep }),
+    ...(approvalHandler === undefined ? {} : { approvalHandler }),
   });
 
   if (opts.json === true) console.log(JSON.stringify(result, null, 2));
@@ -569,14 +605,60 @@ async function taskExploreAction(opts: TaskExploreOpts): Promise<void> {
     if (result.shrink && result.shrink.removedActionIds.length > 0) {
       console.log(`   minimized: removed ${result.shrink.removedActionIds.join(", ")}`);
     }
+    if (result.findingReview) {
+      console.log(
+        `   human review: ${result.findingReview.outcome.toUpperCase()}${result.findingReview.reviewer ? ` by ${result.findingReview.reviewer}` : ""}`,
+      );
+    }
+    if (result.approvalLogFile) console.log(`   approval log: ${result.approvalLogFile}`);
     console.log(`   artifacts: ${result.verification.artifactsDir}`);
   } else {
-    console.log(`\nINCONCLUSIVE ${task.id}: ${result.stoppedReason ?? "No final verdict."}`);
+    console.log(
+      `\n${result.paused === true ? "PAUSED" : "INCONCLUSIVE"} ${task.id}: ${result.stoppedReason ?? "No final verdict."}`,
+    );
+    if (result.approvalLogFile) console.log(`   approval log: ${result.approvalLogFile}`);
   }
 
   if (!result.finished) process.exitCode = 2;
   else if (result.verification?.status === "failed") process.exitCode = 1;
   else if (result.verification?.status !== "passed") process.exitCode = 2;
+}
+
+function interactiveApprovalHandler(reviewer?: string): ApprovalHandler {
+  return async (request: ApprovalRequest): Promise<ApprovalResponse> => {
+    console.log(`\n[SUPERVISION] ${request.summary}`);
+    console.log(`  task: ${request.taskId} · kind: ${request.kind} · risk: ${request.risk}`);
+    console.log(request.detail.replace(/^/gm, "  "));
+    const readline = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      while (true) {
+        const answer = (await readline.question("Approve [a] once, approve [s]ession, [d]eny, or [p]ause? "))
+          .trim()
+          .toLowerCase();
+        if (answer === "a") {
+          return { outcome: "approve", scope: "once", ...(reviewer === undefined ? {} : { reviewer }) };
+        }
+        if (answer === "s") {
+          return {
+            outcome: "approve",
+            scope: "session",
+            ...(reviewer === undefined ? {} : { reviewer }),
+          };
+        }
+        if (answer === "d" || answer === "p") {
+          const note = (await readline.question("Reviewer note (optional): ")).trim();
+          return {
+            outcome: answer === "d" ? "deny" : "pause",
+            scope: "once",
+            ...(reviewer === undefined ? {} : { reviewer }),
+            ...(note.length === 0 ? {} : { note }),
+          };
+        }
+      }
+    } finally {
+      readline.close();
+    }
+  };
 }
 
 const GEN_MODES: GenerationMode[] = ["positive", "negative", "all"];
@@ -764,17 +846,32 @@ taskCommand
   .option("--json", "Emit the ranked task catalog as JSON")
   .action(taskCatalogAction);
 
-taskCommand
-  .command("explore")
-  .description("Explore one task, author a final Playwright spec, and verify it independently")
-  .requiredOption("-r, --repo <path>", "Path to the repo under test")
-  .requiredOption("-f, --file <path>", "Task JSON file (repo-relative or absolute)")
-  .option("-m, --model <id>", "Anthropic model id")
-  .option("--max-steps <n>", "Maximum agent iterations", (v) => Number.parseInt(v, 10))
-  .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
-  .option("--subscription", "Use the Claude Code CLI instead of ANTHROPIC_API_KEY")
-  .option("--json", "Emit the structured agent result")
-  .action(taskExploreAction);
+function addTaskExploreOptions(command: Command): Command {
+  return command
+    .requiredOption("-r, --repo <path>", "Path to the repo under test")
+    .requiredOption("-f, --file <path>", "Task JSON file (repo-relative or absolute)")
+    .option("-m, --model <id>", "Anthropic model id")
+    .option("--max-steps <n>", "Maximum agent iterations", (v) => Number.parseInt(v, 10))
+    .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
+    .option("--subscription", "Use the Claude Code CLI instead of ANTHROPIC_API_KEY")
+    .option("--supervised", "Require approval for risky commands, browser execution, and findings")
+    .option("--approval-mode <mode>", "Supervision policy: autonomous | approve_risky | approve_all")
+    .option("--reviewer <name>", "Reviewer identity written to the approval log")
+    .option("--json", "Emit the structured agent result")
+    .action(taskExploreAction);
+}
+
+addTaskExploreOptions(
+  taskCommand
+    .command("explore")
+    .description("Explore one task, author a final Playwright spec, and verify it independently"),
+);
+
+addTaskExploreOptions(
+  taskCommand
+    .command("resume")
+    .description("Resume a paused supervised task using its persistent approval session"),
+);
 
 taskCommand
   .command("compile")

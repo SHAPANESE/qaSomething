@@ -12,6 +12,12 @@ import type { QATask } from "./schema.js";
 import { compileSequence, loadTaskSequence, type TaskSequence } from "./sequence.js";
 import { shrinkSequence, type ShrinkResult } from "./shrinker.js";
 import { evaluateSafety } from "./safety.js";
+import {
+  createSupervisionController,
+  type ApprovalDecision,
+  type ApprovalHandler,
+  type SupervisionController,
+} from "./supervision.js";
 
 export interface TaskAgentResult {
   finished: boolean;
@@ -21,6 +27,9 @@ export interface TaskAgentResult {
   verification?: TaskRunResult;
   mutation?: TaskMutationProof;
   shrink?: ShrinkResult;
+  paused?: boolean;
+  approvalLogFile?: string;
+  findingReview?: ApprovalDecision;
   stoppedReason?: string;
   workspaceDir: string;
 }
@@ -87,8 +96,9 @@ export async function runTaskAgent(args: {
   config: RunConfig;
   runner: TestRunner;
   onStep?: (step: Step) => void;
+  approvalHandler?: ApprovalHandler;
 }): Promise<TaskAgentResult> {
-  const { model, task, config, runner, onStep } = args;
+  const { model, task, config, runner, onStep, approvalHandler } = args;
   const finalSpec = `tests/qa-generated/${task.id}.spec.ts`;
   const finalSpecAbs = path.join(config.repoPath, finalSpec);
   const mutationSpec = `tests/qa-generated/${task.id}.mutation.spec.ts`;
@@ -100,6 +110,16 @@ export async function runTaskAgent(args: {
   await mkdir(workspaceAbs, { recursive: true });
   await writeFile(path.join(workspaceAbs, "task.json"), JSON.stringify(task, null, 2) + "\n", "utf8");
 
+  let supervision: SupervisionController | undefined;
+  if (task.supervision !== undefined) {
+    supervision = await createSupervisionController({
+      repoPath: config.repoPath,
+      taskId: task.id,
+      policy: task.supervision,
+      ...(approvalHandler === undefined ? {} : { handler: approvalHandler }),
+    });
+  }
+
   const messages: Message[] = [
     { role: "user", content: taskPrompt(task, config.repoPath, finalSpec, workspaceDir) },
   ];
@@ -108,6 +128,32 @@ export async function runTaskAgent(args: {
   const preexistingDirty: ReadonlySet<string> = gitBacked
     ? new Set(await listChangedPaths(config.repoPath))
     : new Set();
+
+  const stopForApproval = async (
+    reason: string,
+    extra: Partial<Pick<TaskAgentResult, "verification" | "mutation" | "findingReview">> = {},
+  ): Promise<TaskAgentResult> => {
+    await writeFile(
+      path.join(workspaceAbs, "trajectory.json"),
+      JSON.stringify(steps, null, 2) + "\n",
+      "utf8",
+    );
+    return {
+      finished: false,
+      paused: true,
+      finalSpec,
+      replayTaskFile: path.relative(config.repoPath, replayTaskFile).split(path.sep).join("/"),
+      steps,
+      stoppedReason: reason,
+      workspaceDir,
+      ...(supervision === undefined
+        ? {}
+        : {
+            approvalLogFile: path.relative(config.repoPath, supervision.auditFile).split(path.sep).join("/"),
+          }),
+      ...extra,
+    };
+  };
 
   for (let index = 0; index < config.maxSteps; index++) {
     const assistant = await model.generate(taskSystemPrompt(config), messages);
@@ -154,6 +200,21 @@ export async function runTaskAgent(args: {
             "[COMPLETION GATE] sequence.json needs a mutation object. Describe a Playwright route or equivalent app-boundary change that should make the same oracle fail; do not use a synthetic assertion failure.",
         });
         continue;
+      }
+      if (supervision !== undefined) {
+        const approval = await supervision.requestSequence(JSON.stringify(sequence, null, 2));
+        if (approval.outcome === "pause") {
+          return stopForApproval(
+            `Paused before browser execution. Review approval ${approval.id} and resume the task.`,
+          );
+        }
+        if (approval.outcome === "deny") {
+          messages.push({
+            role: "user",
+            content: `[SUPERVISION GATE] The reviewer denied this browser sequence${approval.note ? `: ${approval.note}` : "."} Revise sequence.json before finishing again.`,
+          });
+          continue;
+        }
       }
       await mkdir(path.dirname(finalSpecAbs), { recursive: true });
       const compileOptions = {
@@ -225,11 +286,37 @@ export async function runTaskAgent(args: {
           }
         }
       }
+      let findingReview: ApprovalDecision | undefined;
+      if (verification.status === "failed" && supervision !== undefined) {
+        findingReview = await supervision.requestFinding(
+          JSON.stringify(
+            {
+              taskId: task.id,
+              classification: verification.classification,
+              reason: verification.reason,
+              artifactsDir: verification.artifactsDir,
+            },
+            null,
+            2,
+          ),
+        );
+        if (findingReview.outcome === "pause") {
+          return stopForApproval(
+            `Paused with a technically verified finding awaiting human review (${findingReview.id}).`,
+            {
+              verification,
+              ...(verification.mutation === undefined ? {} : { mutation: verification.mutation }),
+              findingReview,
+            },
+          );
+        }
+      }
       await writeFile(
         path.join(workspaceAbs, "trajectory.json"),
         JSON.stringify(steps, null, 2) + "\n",
         "utf8",
       );
+      await supervision?.complete();
       return {
         finished: true,
         finalSpec,
@@ -238,6 +325,15 @@ export async function runTaskAgent(args: {
         verification,
         ...(verification.mutation === undefined ? {} : { mutation: verification.mutation }),
         ...(shrink === undefined ? {} : { shrink }),
+        ...(findingReview === undefined ? {} : { findingReview }),
+        ...(supervision === undefined
+          ? {}
+          : {
+              approvalLogFile: path
+                .relative(config.repoPath, supervision.auditFile)
+                .split(path.sep)
+                .join("/"),
+            }),
         workspaceDir,
       };
     }
@@ -250,10 +346,47 @@ export async function runTaskAgent(args: {
       continue;
     }
 
-    const result = await runCommand(action.command, {
-      cwd: config.repoPath,
-      timeoutMs: config.commandTimeoutMs,
-    });
+    const approval = await supervision?.requestCommand(action.command);
+    if (approval?.outcome === "pause") {
+      const step: Step = {
+        index,
+        assistant,
+        action,
+        result: {
+          command: action.command,
+          blocked: true,
+          blockReason: `Paused for human approval (${approval.id}).`,
+          stdout: "",
+          stderr: "",
+          exitCode: null,
+          timedOut: false,
+          durationMs: 0,
+          revertedPaths: [],
+        },
+      };
+      steps.push(step);
+      onStep?.(step);
+      return stopForApproval(
+        `Paused before command execution. Review approval ${approval.id} and resume the task.`,
+      );
+    }
+    const result =
+      approval?.outcome === "deny"
+        ? {
+            command: action.command,
+            blocked: true,
+            blockReason: `Denied by human reviewer${approval.note ? `: ${approval.note}` : "."}`,
+            stdout: "",
+            stderr: "",
+            exitCode: null,
+            timedOut: false,
+            durationMs: 0,
+            revertedPaths: [],
+          }
+        : await runCommand(action.command, {
+            cwd: config.repoPath,
+            timeoutMs: config.commandTimeoutMs,
+          });
     if (gitBacked && !result.blocked) {
       result.revertedPaths = await revertDisallowedChanges(
         config.repoPath,
@@ -282,6 +415,9 @@ export async function runTaskAgent(args: {
     replayTaskFile: path.relative(config.repoPath, replayTaskFile).split(path.sep).join("/"),
     steps,
     stoppedReason: `Reached the step limit (${config.maxSteps}) without a conclusive final spec.`,
+    ...(supervision === undefined
+      ? {}
+      : { approvalLogFile: path.relative(config.repoPath, supervision.auditFile).split(path.sep).join("/") }),
     workspaceDir,
   };
 }

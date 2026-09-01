@@ -56,6 +56,27 @@ describe("qaTaskSchema", () => {
     expect(task.execution?.projects).toContain("Mobile Chrome");
     expect(task.safety?.maxRequests).toBe(40);
   });
+
+  it("accepts an explicit supervised execution policy", () => {
+    const task = qaTaskSchema.parse({
+      version: 1,
+      id: "checkout-total",
+      goal: "Verify checkout total",
+      supervision: {
+        mode: "approve_risky",
+        checkpointBeforeExecution: true,
+        checkpointBeforeFinding: true,
+        reviewer: "qa@example.test",
+      },
+    });
+
+    expect(task.supervision).toEqual({
+      mode: "approve_risky",
+      checkpointBeforeExecution: true,
+      checkpointBeforeFinding: true,
+      reviewer: "qa@example.test",
+    });
+  });
 });
 
 describe("resolveTaskSpec", () => {

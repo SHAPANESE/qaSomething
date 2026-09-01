@@ -48,6 +48,13 @@ export const businessFlowSchema = z.enum([
   "custom",
 ]);
 
+export const supervisionPolicySchema = z.object({
+  mode: z.enum(["autonomous", "approve_risky", "approve_all"]).default("autonomous"),
+  checkpointBeforeExecution: z.boolean().default(true),
+  checkpointBeforeFinding: z.boolean().default(true),
+  reviewer: z.string().min(1).optional(),
+});
+
 export const qaTaskSchema = z.object({
   version: z.literal(1),
   id: taskId,
@@ -114,6 +121,7 @@ export const qaTaskSchema = z.object({
       maxRequests: z.number().int().positive().optional(),
     })
     .optional(),
+  supervision: supervisionPolicySchema.optional(),
   attempts: z.number().int().min(1).max(10).default(2),
   blockedReason: z.string().min(1).optional(),
 });

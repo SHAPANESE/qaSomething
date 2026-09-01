@@ -200,4 +200,63 @@ describe("runTaskAgent completion gate", () => {
     expect(finalSource).not.toContain("action:noise");
     expect(finalSource).toContain("action:trigger");
   });
+
+  it("pauses before executing an unapproved browser sequence", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-agent-task-"));
+    await writeSequence(repoPath);
+    let runnerCalls = 0;
+    const result = await runTaskAgent({
+      model: new DoneModel(),
+      task: {
+        ...task,
+        supervision: {
+          mode: "approve_risky",
+          checkpointBeforeExecution: true,
+          checkpointBeforeFinding: true,
+        },
+      },
+      config: resolveConfig(repoPath, { maxSteps: 2 }),
+      runner: async () => {
+        runnerCalls++;
+        return run(true);
+      },
+      approvalHandler: async () => ({ outcome: "pause", scope: "once" }),
+    });
+
+    expect(result.finished).toBe(false);
+    expect(result.paused).toBe(true);
+    expect(result.stoppedReason).toContain("before browser execution");
+    expect(result.approvalLogFile).toContain("supervision.json");
+    expect(runnerCalls).toBe(0);
+  });
+
+  it("keeps the technical verdict separate from human finding review", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-agent-task-"));
+    await writeSequence(repoPath);
+    const result = await runTaskAgent({
+      model: new DoneModel(),
+      task: {
+        ...task,
+        supervision: {
+          mode: "approve_risky",
+          checkpointBeforeExecution: true,
+          checkpointBeforeFinding: true,
+        },
+      },
+      config: resolveConfig(repoPath, { maxSteps: 2 }),
+      runner: async () => run(false),
+      approvalHandler: async (request) =>
+        request.kind === "finding"
+          ? { outcome: "deny", scope: "once", note: "Expected behavior" }
+          : { outcome: "approve", scope: "once" },
+    });
+
+    expect(result.finished).toBe(true);
+    expect(result.verification?.status).toBe("failed");
+    expect(result.findingReview).toMatchObject({
+      kind: "finding",
+      outcome: "deny",
+      note: "Expected behavior",
+    });
+  });
 });

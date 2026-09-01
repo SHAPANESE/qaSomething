@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Supervised agentic testing.** Task exploration now supports `autonomous`,
+  `approve_risky`, and `approve_all` policies with human checkpoints before
+  shell execution, final Playwright execution, and finding acceptance. Decisions
+  are persisted in an auditable session log, and paused runs can continue through
+  the new `task resume` command.
+
 - **Task-driven exploratory QA MVP.** New `init`, `task explore`, `task compile`,
   and `task run` commands turn focused goals into semantic action sequences,
   enforce action-level safety policies, compile instrumented Playwright specs,

@@ -79,6 +79,12 @@ A task is deliberately small and auditable:
     "allow": ["read", "create_test_data", "modify_test_data", "delete_test_data"],
     "deny": ["external_message", "payment", "user_admin"],
     "maxRequests": 150
+  },
+  "supervision": {
+    "mode": "approve_risky",
+    "checkpointBeforeExecution": true,
+    "checkpointBeforeFinding": true,
+    "reviewer": "qa@example.test"
   }
 }
 ```
@@ -238,12 +244,52 @@ Artifacts live under:
     sequence.json
     sequence.min.json
     trajectory.json
+    supervision.json
   task-runs/<run-id>/
     task.json
     attempt-1.log
     attempt-2.log
     result.json
 ```
+
+## Supervised agentic testing
+
+The mechanical exploration can run autonomously while a QA remains the decision
+owner. Enable it in the task's `supervision` block above, or from the CLI:
+
+```bash
+node dist/index.js task explore \
+  --repo /path/to/app \
+  --file qa-tasks/checkout.json \
+  --subscription \
+  --supervised \
+  --reviewer "QA Name"
+```
+
+`--supervised` selects `approve_risky`: confidently read-only inspection is
+automatic, while executable shell commands require review. The QA also reviews
+the final semantic browser sequence before Playwright runs and separately
+accepts or rejects a reproducible finding. Use `--approval-mode approve_all` to
+review every shell command; `autonomous` preserves the original behavior.
+
+At each checkpoint the reviewer can approve once, approve that risk category
+for the session, deny it and let the agent revise, or pause. A paused run exits
+without authorizing the operation. Resume it with the same task and options:
+
+```bash
+node dist/index.js task resume \
+  --repo /path/to/app \
+  --file qa-tasks/checkout.json \
+  --subscription \
+  --supervised
+```
+
+The durable `.qa-agent/task-work/<task-id>/supervision.json` records request
+hashes, decisions, reviewer identity, notes, timestamps, and automatic/session
+approvals. In `--json` mode there is no interactive prompt: a required approval
+fails closed by pausing the run. Static command screening, semantic safety, the
+write allowlist, repeated verification, mutation proof, and evidence gates still
+apply after human approval; approval does not bypass them.
 
 ## Safety
 
