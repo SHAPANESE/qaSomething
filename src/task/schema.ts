@@ -50,6 +50,7 @@ export const businessFlowSchema = z.enum([
 
 export const supervisionPolicySchema = z.object({
   mode: z.enum(["autonomous", "approve_risky", "approve_all"]).default("autonomous"),
+  checkpointBeforePlan: z.boolean().default(true),
   checkpointBeforeExecution: z.boolean().default(true),
   checkpointBeforeFinding: z.boolean().default(true),
   reviewer: z.string().min(1).optional(),

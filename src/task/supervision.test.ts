@@ -27,7 +27,12 @@ describe("supervision controller", () => {
     const controller = await createSupervisionController({
       repoPath,
       taskId: "login",
-      policy: { mode: "approve_risky", checkpointBeforeExecution: true, checkpointBeforeFinding: true },
+      policy: {
+        mode: "approve_risky",
+        checkpointBeforePlan: true,
+        checkpointBeforeExecution: true,
+        checkpointBeforeFinding: true,
+      },
       handler,
     });
 
@@ -52,6 +57,7 @@ describe("supervision controller", () => {
       taskId: "login",
       policy: {
         mode: "approve_all" as const,
+        checkpointBeforePlan: true,
         checkpointBeforeExecution: true,
         checkpointBeforeFinding: true,
       },
@@ -77,7 +83,12 @@ describe("supervision controller", () => {
     const controller = await createSupervisionController({
       repoPath,
       taskId: "login",
-      policy: { mode: "approve_all", checkpointBeforeExecution: true, checkpointBeforeFinding: true },
+      policy: {
+        mode: "approve_all",
+        checkpointBeforePlan: true,
+        checkpointBeforeExecution: true,
+        checkpointBeforeFinding: true,
+      },
       handler: async () => ({ outcome: "pause", scope: "once", note: "Need product input" }),
     });
 
@@ -86,5 +97,50 @@ describe("supervision controller", () => {
     expect(decision.outcome).toBe("pause");
     expect(controller.session.status).toBe("paused");
     expect(controller.session.decisions[0]?.note).toBe("Need product input");
+  });
+
+  it("requires explicit approval for a feature test plan", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-supervision-"));
+    const handler: ApprovalHandler = vi.fn(async () => ({ outcome: "approve", scope: "once" }));
+    const controller = await createSupervisionController({
+      repoPath,
+      taskId: "checkout",
+      policy: {
+        mode: "approve_risky",
+        checkpointBeforePlan: true,
+        checkpointBeforeExecution: true,
+        checkpointBeforeFinding: true,
+      },
+      handler,
+    });
+
+    const decision = await controller.requestPlan('{"scenarios":[]}');
+
+    expect(decision).toMatchObject({ kind: "plan", outcome: "approve", automatic: false });
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("does not leak session approvals into a later completed run", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-supervision-"));
+    const handler: ApprovalHandler = vi.fn(async () => ({ outcome: "approve", scope: "session" }));
+    const args = {
+      repoPath,
+      taskId: "checkout",
+      policy: {
+        mode: "approve_all" as const,
+        checkpointBeforePlan: true,
+        checkpointBeforeExecution: true,
+        checkpointBeforeFinding: true,
+      },
+      handler,
+    };
+    const first = await createSupervisionController(args);
+    await first.requestCommand("node first.mjs");
+    await first.complete();
+
+    const later = await createSupervisionController(args);
+    await later.requestCommand("node later.mjs");
+
+    expect(handler).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "checkout-coupon",
+  "goal": "Apply a coupon during checkout",
+  "context": "Coupons may be valid, expired, or owned by another customer.",
+  "acceptanceCriteria": [
+    { "id": "ac-1", "text": "A valid coupon updates the order total" },
+    { "id": "ac-2", "text": "An expired coupon is rejected" },
+    { "id": "ac-3", "text": "A customer cannot use another customer's coupon" }
+  ],
+  "target": {
+    "baseUrl": "http://localhost:3000",
+    "actor": "customer"
+  },
+  "risk": {
+    "impact": 5,
+    "probability": 3,
+    "areas": ["checkout", "pricing"]
+  },
+  "coverage": {
+    "e2e": "required",
+    "api": "auto",
+    "visual": "auto",
+    "security": "required",
+    "matrix": ["chromium", "Mobile Chrome"]
+  },
+  "attempts": 2,
+  "safety": {
+    "allow": ["read", "create_test_data", "delete_test_data"],
+    "deny": ["external_message", "payment", "user_admin"]
+  },
+  "supervision": {
+    "mode": "approve_risky",
+    "checkpointBeforePlan": true,
+    "checkpointBeforeExecution": true,
+    "checkpointBeforeFinding": true,
+    "reviewer": "QA Name"
+  }
+}

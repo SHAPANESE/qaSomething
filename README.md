@@ -49,6 +49,79 @@ node dist/index.js task explore \
 Use `--auth storage-state.json` during `init` to copy an existing Playwright
 authenticated session into the ignored `.qa-agent/auth/` directory.
 
+## Test a feature like a QA
+
+`feature test` turns acceptance criteria into a focused, risk-based QA campaign.
+The model proposes the smallest useful set of happy-path, negative, boundary,
+authorization, regression, visual, API-contract, or manual-review scenarios.
+The harness rejects plans that omit an acceptance criterion or violate an
+explicit `required`/`skip` coverage decision. In supervised mode, a QA approves
+the plan before any scenario runs.
+
+```json
+{
+  "version": 1,
+  "id": "checkout-coupon",
+  "goal": "Apply a coupon during checkout",
+  "context": "Coupons may be valid, expired, or owned by another customer.",
+  "acceptanceCriteria": [
+    { "id": "ac-1", "text": "A valid coupon updates the order total" },
+    { "id": "ac-2", "text": "An expired coupon is rejected" },
+    { "id": "ac-3", "text": "A customer cannot use another customer's coupon" }
+  ],
+  "target": { "baseUrl": "http://localhost:3000", "actor": "customer" },
+  "risk": { "impact": 5, "probability": 3, "areas": ["checkout", "pricing"] },
+  "coverage": {
+    "e2e": "required",
+    "api": "auto",
+    "visual": "auto",
+    "security": "required",
+    "matrix": ["chromium", "Mobile Chrome"]
+  },
+  "attempts": 2,
+  "safety": {
+    "allow": ["read", "create_test_data", "delete_test_data"],
+    "deny": ["external_message", "payment", "user_admin"]
+  },
+  "supervision": {
+    "mode": "approve_risky",
+    "checkpointBeforePlan": true,
+    "checkpointBeforeExecution": true,
+    "checkpointBeforeFinding": true,
+    "reviewer": "QA Name"
+  }
+}
+```
+
+Run the full campaign or inspect its plan first:
+
+```bash
+node dist/index.js feature test \
+  --repo /path/to/app \
+  --file qa-features/checkout-coupon.json \
+  --subscription \
+  --supervised
+
+node dist/index.js feature test \
+  --repo /path/to/app \
+  --file qa-features/checkout-coupon.json \
+  --subscription \
+  --supervised \
+  --plan-only
+```
+
+Browser scenarios use the adaptive Playwright agent and retain its safety,
+mutation, repetition, evidence, minimization, and finding-review gates. When
+`feature.api` supplies a contract and URL, API scenarios route to Schemathesis.
+`coverage.matrix` replays verified browser specs across the requested profiles.
+Visual scenarios capture visual evidence; true baseline regression still needs
+an explicit `visual_snapshot` oracle check. Authorization/security scenarios
+exercise product permissions and validation—they are not a general pentest.
+
+The campaign writes `plan.json`, `result.json`, and a criterion-level `report.md`
+under `.qa-agent/feature-runs/`. Final campaign states are `passed`, `failed`,
+`inconclusive`, `paused`, or `needs_review`.
+
 ## QA tasks
 
 A task is deliberately small and auditable:
@@ -82,6 +155,7 @@ A task is deliberately small and auditable:
   },
   "supervision": {
     "mode": "approve_risky",
+    "checkpointBeforePlan": true,
     "checkpointBeforeExecution": true,
     "checkpointBeforeFinding": true,
     "reviewer": "qa@example.test"

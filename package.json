@@ -19,6 +19,7 @@
   "files": [
     "dist",
     "docs",
+    "qa-features",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

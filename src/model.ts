@@ -45,6 +45,33 @@ export function claudeCliModel(): Model {
   };
 }
 
+/** Subscription-backed free-form model for structured planning rather than shell-agent actions. */
+export function claudeCliTextModel(): Model {
+  return {
+    id: "claude-cli (subscription, structured text)",
+    async generate(system, messages) {
+      const convo = messages
+        .filter((message) => message.role !== "system")
+        .map((message) => `### ${message.role.toUpperCase()}\n${message.content}`)
+        .join("\n\n");
+      const prompt = [
+        "You are a text generator inside another program.",
+        "Follow the INSTRUCTIONS and return only the response requested by the conversation.",
+        "Never use tools and never execute anything yourself.",
+        "\n===== INSTRUCTIONS =====\n" + system,
+        "\n===== CONVERSATION =====\n" + convo,
+        "\n===== YOUR RESPONSE =====",
+      ].join("\n");
+      const result = await execa("claude", ["-p", "--output-format", "text"], {
+        input: prompt,
+        reject: false,
+        timeout: 300_000,
+      });
+      return String(result.stdout ?? "");
+    },
+  };
+}
+
 export function createAnthropicModel(modelId: string): Model {
   const model = anthropic(modelId);
   return {

@@ -64,6 +64,7 @@ describe("qaTaskSchema", () => {
       goal: "Verify checkout total",
       supervision: {
         mode: "approve_risky",
+        checkpointBeforePlan: true,
         checkpointBeforeExecution: true,
         checkpointBeforeFinding: true,
         reviewer: "qa@example.test",
@@ -72,6 +73,7 @@ describe("qaTaskSchema", () => {
 
     expect(task.supervision).toEqual({
       mode: "approve_risky",
+      checkpointBeforePlan: true,
       checkpointBeforeExecution: true,
       checkpointBeforeFinding: true,
       reviewer: "qa@example.test",

@@ -9,6 +9,7 @@ export type ApprovalScope = "once" | "session";
 
 export interface SupervisionPolicy {
   mode: SupervisionMode;
+  checkpointBeforePlan: boolean;
   checkpointBeforeExecution: boolean;
   checkpointBeforeFinding: boolean;
   reviewer?: string | undefined;
@@ -17,8 +18,8 @@ export interface SupervisionPolicy {
 export interface ApprovalRequest {
   id: string;
   taskId: string;
-  kind: "command" | "sequence" | "finding";
-  risk: CommandRisk | "execution" | "finding";
+  kind: "command" | "plan" | "sequence" | "execution" | "finding";
+  risk: CommandRisk | "plan" | "execution" | "finding";
   summary: string;
   detail: string;
 }
@@ -52,7 +53,9 @@ export interface SupervisionController {
   session: SupervisionSession;
   auditFile: string;
   requestCommand(command: string): Promise<ApprovalDecision>;
+  requestPlan(detail: string): Promise<ApprovalDecision>;
   requestSequence(detail: string): Promise<ApprovalDecision>;
+  requestExecution(detail: string, summary?: string): Promise<ApprovalDecision>;
   requestFinding(detail: string): Promise<ApprovalDecision>;
   complete(): Promise<void>;
 }
@@ -131,7 +134,7 @@ export async function createSupervisionController(args: {
   const now = new Date().toISOString();
   const previous = await loadSession(auditFile);
   const session: SupervisionSession =
-    previous?.taskId === args.taskId && previous.mode === args.policy.mode
+    previous?.taskId === args.taskId && previous.mode === args.policy.mode && previous.status !== "completed"
       ? { ...previous, status: "running", updatedAt: now }
       : {
           schemaVersion: 1,
@@ -234,10 +237,24 @@ export async function createSupervisionController(args: {
         automatic,
       );
     },
+    async requestPlan(detail) {
+      return decide(
+        makeRequest("plan", "plan", "Approve the proposed risk-based QA plan", detail),
+        "plan:feature",
+        args.policy.mode === "autonomous" || !args.policy.checkpointBeforePlan,
+      );
+    },
     async requestSequence(detail) {
       return decide(
         makeRequest("sequence", "execution", "Execute the proposed browser sequence", detail),
         "sequence:execution",
+        args.policy.mode === "autonomous" || !args.policy.checkpointBeforeExecution,
+      );
+    },
+    async requestExecution(detail, summary = "Execute the proposed test operation") {
+      return decide(
+        makeRequest("execution", "execution", summary, detail),
+        "execution:operation",
         args.policy.mode === "autonomous" || !args.policy.checkpointBeforeExecution,
       );
     },

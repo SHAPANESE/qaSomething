@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { resolveConfig, type RunConfig } from "./config.js";
 import { runAgent } from "./loop.js";
-import { claudeCliModel, createAnthropicModel } from "./model.js";
+import { claudeCliModel, claudeCliTextModel, createAnthropicModel } from "./model.js";
 import { fileTicketProvider, formatOracle, jiraProviderFromEnv } from "./oracle.js";
 import { loadProjectConfig, type ProjectConfig } from "./projectConfig.js";
 import type { EnvInfo } from "./prompt.js";
@@ -40,12 +40,16 @@ import { initializeProject } from "./init.js";
 import { compileSequence, loadTaskSequence } from "./task/sequence.js";
 import { evaluateSafety } from "./task/safety.js";
 import { rankByRisk } from "./task/risk.js";
-import type {
-  ApprovalHandler,
-  ApprovalRequest,
-  ApprovalResponse,
-  SupervisionMode,
+import {
+  createSupervisionController,
+  type ApprovalHandler,
+  type ApprovalRequest,
+  type ApprovalResponse,
+  type SupervisionMode,
 } from "./task/supervision.js";
+import { loadFeature, type Feature, type QAPlan } from "./feature/schema.js";
+import { planFeature } from "./feature/planner.js";
+import { runFeatureCampaign, type ApiScenarioExecution } from "./feature/runner.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CRITERIA = path.resolve(HERE, "..", "docs", "qa-senior-criteria.md");
@@ -362,6 +366,20 @@ interface TaskExploreOpts extends TaskRunOpts {
   reviewer?: string;
 }
 
+interface FeatureTestOpts {
+  repo: string;
+  file: string;
+  model?: string;
+  maxSteps?: number;
+  timeout?: number;
+  subscription?: boolean;
+  supervised?: boolean;
+  approvalMode?: string;
+  reviewer?: string;
+  planOnly?: boolean;
+  json?: boolean;
+}
+
 interface TaskCompileOpts {
   repo: string;
   file: string;
@@ -559,6 +577,7 @@ async function taskExploreAction(opts: TaskExploreOpts): Promise<void> {
           ...loadedTask,
           supervision: {
             mode: requestedMode,
+            checkpointBeforePlan: loadedTask.supervision?.checkpointBeforePlan ?? true,
             checkpointBeforeExecution: loadedTask.supervision?.checkpointBeforeExecution ?? true,
             checkpointBeforeFinding: loadedTask.supervision?.checkpointBeforeFinding ?? true,
             ...((opts.reviewer ?? loadedTask.supervision?.reviewer) === undefined
@@ -659,6 +678,258 @@ function interactiveApprovalHandler(reviewer?: string): ApprovalHandler {
       readline.close();
     }
   };
+}
+
+function renderFeaturePlan(plan: QAPlan): void {
+  console.log(`\nQA plan: ${plan.summary}`);
+  for (const scenario of plan.scenarios) {
+    console.log(
+      `  ${scenario.priority.toUpperCase()}  ${scenario.id}  [${scenario.technique}/${scenario.execution}]`,
+    );
+    console.log(`      ${scenario.title} · criteria: ${scenario.criterionIds.join(", ")}`);
+    console.log(`      why: ${scenario.rationale}`);
+  }
+  if (plan.excluded.length > 0) {
+    console.log("  excluded:");
+    for (const item of plan.excluded) console.log(`      ${item.area}: ${item.reason}`);
+  }
+  if (plan.questions.length > 0) {
+    console.log("  questions:");
+    for (const question of plan.questions) {
+      console.log(`      ${question.blocking ? "BLOCKING " : ""}${question.question}`);
+    }
+  }
+}
+
+async function featureTestAction(opts: FeatureTestOpts): Promise<void> {
+  if (opts.subscription !== true && !process.env["ANTHROPIC_API_KEY"]) {
+    console.error("Error: ANTHROPIC_API_KEY is not set. Export it, or use --subscription.");
+    process.exitCode = 1;
+    return;
+  }
+  const repoPath = path.resolve(opts.repo);
+  const featureFile = path.isAbsolute(opts.file) ? opts.file : path.join(repoPath, opts.file);
+  const loadedFeature = await loadFeature(featureFile);
+  const supervisionModes: SupervisionMode[] = ["autonomous", "approve_risky", "approve_all"];
+  if (opts.approvalMode !== undefined && !supervisionModes.includes(opts.approvalMode as SupervisionMode)) {
+    throw new Error(`--approval-mode must be one of ${supervisionModes.join(", ")}.`);
+  }
+  const requestedMode =
+    (opts.approvalMode as SupervisionMode | undefined) ??
+    (opts.supervised === true ? "approve_risky" : loadedFeature.supervision?.mode);
+  const reviewer = opts.reviewer ?? loadedFeature.supervision?.reviewer;
+  const feature: Feature =
+    requestedMode === undefined
+      ? loadedFeature
+      : {
+          ...loadedFeature,
+          supervision: {
+            mode: requestedMode,
+            checkpointBeforePlan: loadedFeature.supervision?.checkpointBeforePlan ?? true,
+            checkpointBeforeExecution: loadedFeature.supervision?.checkpointBeforeExecution ?? true,
+            checkpointBeforeFinding: loadedFeature.supervision?.checkpointBeforeFinding ?? true,
+            ...(reviewer === undefined ? {} : { reviewer }),
+          },
+        };
+
+  const overrides: Partial<RunConfig> = {};
+  if (opts.timeout !== undefined) overrides.commandTimeoutMs = opts.timeout;
+  if (opts.maxSteps !== undefined) overrides.maxSteps = opts.maxSteps;
+  if (opts.model !== undefined) overrides.modelId = opts.model;
+  const { config } = await buildConfig(repoPath, overrides);
+  const plannerModel =
+    opts.subscription === true ? claudeCliTextModel() : createAnthropicModel(config.modelId);
+  const executionModel = opts.subscription === true ? claudeCliModel() : createAnthropicModel(config.modelId);
+  const approvalHandler =
+    feature.supervision?.mode !== undefined && feature.supervision.mode !== "autonomous" && opts.json !== true
+      ? interactiveApprovalHandler(feature.supervision.reviewer)
+      : undefined;
+  const supervision =
+    feature.supervision === undefined
+      ? undefined
+      : await createSupervisionController({
+          repoPath,
+          taskId: `feature-${feature.id}`,
+          policy: feature.supervision,
+          ...(approvalHandler === undefined ? {} : { handler: approvalHandler }),
+        });
+
+  const workDir = path.join(repoPath, ".qa-agent", "feature-work", feature.id);
+  await mkdir(workDir, { recursive: true });
+  await writeFile(path.join(workDir, "feature.json"), JSON.stringify(feature, null, 2) + "\n", "utf8");
+
+  let plan: QAPlan | undefined;
+  let reviewerFeedback: string | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    plan = await planFeature({
+      model: plannerModel,
+      feature,
+      ...(reviewerFeedback === undefined ? {} : { reviewerFeedback }),
+    });
+    await writeFile(path.join(workDir, "plan.json"), JSON.stringify(plan, null, 2) + "\n", "utf8");
+    if (opts.json !== true) renderFeaturePlan(plan);
+    const decision = await supervision?.requestPlan(JSON.stringify(plan, null, 2));
+    if (decision === undefined || decision.outcome === "approve") break;
+    if (decision.outcome === "pause") {
+      const paused = {
+        schemaVersion: 1,
+        featureId: feature.id,
+        status: "paused",
+        reason: `The QA plan is awaiting human approval (${decision.id}).`,
+        plan,
+        approvalLogFile:
+          supervision === undefined
+            ? undefined
+            : path.relative(repoPath, supervision.auditFile).split(path.sep).join("/"),
+      };
+      console.log(opts.json === true ? JSON.stringify(paused, null, 2) : `\nPAUSED: ${paused.reason}`);
+      process.exitCode = 2;
+      return;
+    }
+    reviewerFeedback =
+      decision.note ?? "The reviewer rejected the plan. Reduce risk or revise its scenarios.";
+    plan = undefined;
+  }
+  if (plan === undefined) {
+    console.error("The reviewer rejected three QA plans; the feature remains untested.");
+    process.exitCode = 2;
+    return;
+  }
+
+  if (opts.planOnly === true) {
+    await supervision?.complete();
+    if (opts.json === true) console.log(JSON.stringify(plan, null, 2));
+    else console.log(`\nPlan approved and saved to ${path.relative(repoPath, workDir)}/plan.json`);
+    return;
+  }
+
+  const apiConfig = feature.api;
+  const runApi =
+    apiConfig === undefined
+      ? undefined
+      : async (): Promise<ApiScenarioExecution> => {
+          const url = apiConfig.url ?? feature.target?.baseUrl;
+          if (url === undefined) {
+            return {
+              statusOverride: "needs_review",
+              reason:
+                "API coverage was planned, but neither feature.api.url nor target.baseUrl is configured.",
+            };
+          }
+          const approval = await supervision?.requestExecution(
+            JSON.stringify({ kind: "api_contract", ...apiConfig, url }, null, 2),
+            "Execute the generated API contract campaign",
+          );
+          if (approval?.outcome === "pause") {
+            return {
+              statusOverride: "paused",
+              reason: `API contract execution is awaiting approval (${approval.id}).`,
+            };
+          }
+          if (approval?.outcome === "deny") {
+            return {
+              statusOverride: "needs_review",
+              reason: `The reviewer denied API execution${approval.note ? `: ${approval.note}` : "."}`,
+            };
+          }
+          const spec = path.isAbsolute(apiConfig.spec) ? apiConfig.spec : path.join(repoPath, apiConfig.spec);
+          let contract;
+          try {
+            contract = await runContract(
+              {
+                spec,
+                url,
+                ...(apiConfig.checks === undefined ? {} : { checks: apiConfig.checks }),
+                mode: apiConfig.mode,
+                ...(apiConfig.maxExamples === undefined ? {} : { maxExamples: apiConfig.maxExamples }),
+              },
+              schemathesisRunner(repoPath, config.commandTimeoutMs),
+            );
+          } catch (error) {
+            contract = {
+              passed: false,
+              exitCode: null,
+              report: null,
+              failures: [],
+              output: String(error),
+              inconclusive: true as const,
+            };
+          }
+          if (!contract.passed && contract.inconclusive !== true) {
+            const findingReview = await supervision?.requestFinding(
+              JSON.stringify(
+                {
+                  kind: "api_contract_violation",
+                  failures: contract.failures,
+                  output: contract.output.slice(-4_000),
+                },
+                null,
+                2,
+              ),
+            );
+            if (findingReview?.outcome === "pause") {
+              return {
+                result: contract,
+                findingReview,
+                statusOverride: "paused",
+                reason: `API violations are awaiting human review (${findingReview.id}).`,
+              };
+            }
+            return {
+              result: contract,
+              ...(findingReview === undefined ? {} : { findingReview }),
+            };
+          }
+          return { result: contract };
+        };
+
+  const result = await runFeatureCampaign({
+    repoPath,
+    feature,
+    plan,
+    runBrowser: async (task, projects) => {
+      if (opts.json !== true) console.log(`\nRunning scenario: ${task.business?.capability ?? task.id}`);
+      const agent = await runTaskAgent({
+        model: executionModel,
+        task,
+        config,
+        runner: playwrightRunner(repoPath, config.commandTimeoutMs),
+        ...(opts.json === true ? {} : { onStep: renderStep }),
+        ...(approvalHandler === undefined ? {} : { approvalHandler }),
+      });
+      if (agent.finished !== true || agent.verification?.status !== "passed" || projects.length === 0) {
+        return { agent };
+      }
+      const replayTask = await loadTask(path.join(repoPath, agent.replayTaskFile));
+      const matrix = [];
+      for (const project of projects) {
+        matrix.push(
+          await runTask({
+            repoPath,
+            task: replayTask,
+            runner: playwrightRunner(repoPath, config.commandTimeoutMs, project),
+            allowedWriteDirs: config.allowedWriteDirs,
+            executionProfile: project,
+          }),
+        );
+      }
+      return { agent, matrix };
+    },
+    ...(runApi === undefined ? {} : { runApi }),
+  });
+
+  if (result.status !== "paused") await supervision?.complete();
+  if (opts.json === true) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`\n${result.status.toUpperCase()} ${feature.id}: ${result.reason}`);
+    for (const scenario of result.scenarios) {
+      console.log(`  ${scenario.status.padEnd(13)} ${scenario.scenario.id} · ${scenario.reason}`);
+    }
+    console.log(`  report: ${result.reportFile}`);
+  }
+  if (result.status === "failed") process.exitCode = 1;
+  if (result.status !== "passed" && result.status !== "failed") process.exitCode = 2;
 }
 
 const GEN_MODES: GenerationMode[] = ["positive", "negative", "all"];
@@ -812,6 +1083,26 @@ program
   .option("--json", "Emit machine-readable JSON (for CI / qa-run)")
   .option("--timeout <ms>", "Per-command timeout in ms", (v) => Number.parseInt(v, 10))
   .action(apiAction);
+
+const featureCommand = program
+  .command("feature")
+  .description("Plan and execute risk-based QA campaigns for product features.");
+
+featureCommand
+  .command("test")
+  .description("Test one feature as a supervised QA would: plan, explore, verify, and report")
+  .requiredOption("-r, --repo <path>", "Path to the repo under test")
+  .requiredOption("-f, --file <path>", "Feature JSON file (repo-relative or absolute)")
+  .option("-m, --model <id>", "Anthropic model id")
+  .option("--max-steps <n>", "Maximum agent iterations per browser scenario", (v) => Number.parseInt(v, 10))
+  .option("--timeout <ms>", "Per-command and test timeout in ms", (v) => Number.parseInt(v, 10))
+  .option("--subscription", "Use the Claude Code CLI instead of ANTHROPIC_API_KEY")
+  .option("--supervised", "Require QA approval for the plan, risky execution, and findings")
+  .option("--approval-mode <mode>", "Supervision policy: autonomous | approve_risky | approve_all")
+  .option("--reviewer <name>", "Reviewer identity written to approval logs")
+  .option("--plan-only", "Generate, validate, and approve the QA plan without executing it")
+  .option("--json", "Emit the structured campaign result")
+  .action(featureTestAction);
 
 const taskCommand = program.command("task").description("Run isolated, reproducible QA tasks.");
 

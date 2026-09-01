@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Risk-based feature QA campaigns.** New `feature test` command reads explicit
+  acceptance criteria, asks an AI planner for a focused QA strategy, validates
+  criterion and coverage mappings deterministically, gates the plan on human
+  approval, dispatches adaptive browser/API/matrix/manual-review scenarios, and
+  emits one criterion-level report. `--plan-only` supports review before execution.
+
 - **Supervised agentic testing.** Task exploration now supports `autonomous`,
   `approve_risky`, and `approve_all` policies with human checkpoints before
   shell execution, final Playwright execution, and finding acceptance. Decisions

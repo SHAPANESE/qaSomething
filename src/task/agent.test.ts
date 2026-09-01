@@ -211,6 +211,7 @@ describe("runTaskAgent completion gate", () => {
         ...task,
         supervision: {
           mode: "approve_risky",
+          checkpointBeforePlan: true,
           checkpointBeforeExecution: true,
           checkpointBeforeFinding: true,
         },
@@ -239,6 +240,7 @@ describe("runTaskAgent completion gate", () => {
         ...task,
         supervision: {
           mode: "approve_risky",
+          checkpointBeforePlan: true,
           checkpointBeforeExecution: true,
           checkpointBeforeFinding: true,
         },
