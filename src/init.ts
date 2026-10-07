@@ -1,4 +1,4 @@
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export interface InitOptions {
@@ -67,8 +67,11 @@ export async function initializeProject(options: InitOptions): Promise<InitResul
   if (options.authFile !== undefined) {
     const authDir = path.join(repoPath, ".qa-agent", "auth");
     await mkdir(authDir, { recursive: true });
+    // Session cookies live in the app's repo: ignore them there, before they exist.
+    await writeFile(path.join(authDir, ".gitignore"), "*\n", "utf8");
     copiedAuth = path.join(authDir, "default.json");
     await copyFile(path.resolve(options.authFile), copiedAuth);
+    await chmod(copiedAuth, 0o600);
   }
 
   return {
