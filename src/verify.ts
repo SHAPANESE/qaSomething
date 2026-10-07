@@ -292,13 +292,24 @@ export type MutationVerdict =
   | { kind: "meaningful" }
   | { kind: "baseline-broken" }
   | { kind: "not-meaningful" }
+  | { kind: "unproven" }
   | { kind: "no-mutation-proof" };
+
+/**
+ * Pure: a mutation run's failure proves the oracle only when the run executed and,
+ * for instrumented specs, reached the oracle. A mutation that breaks navigation
+ * fails before any assertion runs and proves nothing about the assertion.
+ */
+export function mutationFailureProvesOracle(run: TestRunResult): boolean {
+  return !run.passed && run.inconclusive !== true && run.evidence?.oracleReached !== false;
+}
 
 /** Pure: check real→pass / mutation→fail polarity. */
 export function checkMutationPolarity(real: Stability, mutation: TestRunResult | null): MutationVerdict {
   if (real.kind !== "stable-pass") return { kind: "baseline-broken" };
   if (mutation === null) return { kind: "no-mutation-proof" };
-  return mutation.passed ? { kind: "not-meaningful" } : { kind: "meaningful" };
+  if (mutation.passed) return { kind: "not-meaningful" };
+  return mutationFailureProvesOracle(mutation) ? { kind: "meaningful" } : { kind: "unproven" };
 }
 
 export interface TestVerdict {
@@ -320,6 +331,10 @@ export function decideVerdict(spec: string, stability: Stability, mutation: Muta
   if (stability.kind === "flaky") reasons.push(`Flaky: passed ${stability.passes}/${stability.runs} runs.`);
   if (mutation.kind === "not-meaningful")
     reasons.push("Mutation proof still passes — assertions don't verify real behavior.");
+  if (mutation.kind === "unproven")
+    reasons.push(
+      "Mutation proof failed before reaching the oracle (or could not run) — make the mutation change what the assertion checks, not break navigation.",
+    );
   if (mutation.kind === "no-mutation-proof")
     reasons.push("No *.mutation.spec.ts sibling — cannot prove the test catches a bug.");
   const trusted = stability.kind === "stable-pass" && mutation.kind === "meaningful";

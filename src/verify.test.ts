@@ -207,6 +207,17 @@ describe("checkMutationPolarity", () => {
   it("flags a missing mutation proof", () => {
     expect(checkMutationPolarity({ kind: "stable-pass" }, null)).toEqual({ kind: "no-mutation-proof" });
   });
+  it("is unproven when the mutation fails before reaching the oracle", () => {
+    const evidence = { channels: [], oracleReached: false, responses: [], console: [], pageErrors: [] };
+    expect(checkMutationPolarity({ kind: "stable-pass" }, { ...run(false), evidence })).toEqual({
+      kind: "unproven",
+    });
+  });
+  it("is unproven when the mutation run could not execute", () => {
+    expect(checkMutationPolarity({ kind: "stable-pass" }, { ...run(false), inconclusive: true })).toEqual({
+      kind: "unproven",
+    });
+  });
 });
 
 describe("decideVerdict", () => {
