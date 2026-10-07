@@ -1,5 +1,6 @@
 import { execa } from "execa";
 import path from "node:path";
+import { agentEnv } from "./shell.js";
 
 /**
  * Harness-enforced trust gates. The agent's word is not evidence — these run
@@ -443,6 +444,9 @@ export function playwrightRunner(repoPath: string, timeoutMs: number, project?: 
         reject: false,
         preferLocal: true,
         localDir: repoPath,
+        // Specs are model-authored Node code; keep the user's secrets out of reach.
+        env: agentEnv(),
+        extendEnv: false,
         // Keep the JSON report on stdout even if it's large.
         maxBuffer: 64 * 1024 * 1024,
       },

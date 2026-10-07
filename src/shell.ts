@@ -77,6 +77,26 @@ export function screenCommand(command: string, blocklist: BlocklistRule[] = DEFA
   return { allowed: true };
 }
 
+// ponytail: name-based denylist, so a secret under an innocent name (or inside a URL
+// like DATABASE_URL) still leaks. An allowlist would break app configs that read env;
+// real containment is a container with no secrets mounted.
+const SECRET_ENV_RE =
+  /KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH|COOKIE|SESSION|PRIVATE|^AWS_|^GITHUB_|^ANTHROPIC_|^JIRA_|DATABASE_URL|_DSN$/i;
+
+/**
+ * Environment for agent-controlled processes (shell commands and model-authored
+ * specs). The agent reads untrusted page content, so it must not inherit the
+ * user's API keys and tokens: with no secrets in reach, an egress bypass of
+ * screenCommand has nothing to exfiltrate.
+ */
+export function agentEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const clean: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (value !== undefined && !SECRET_ENV_RE.test(name)) clean[name] = value;
+  }
+  return clean;
+}
+
 export interface RunCommandOptions {
   cwd: string;
   timeoutMs: number;
@@ -119,7 +139,8 @@ export async function runCommand(command: string, options: RunCommandOptions): P
     reject: false,
     all: false,
     stripFinalNewline: false,
-    ...(options.env ? { env: options.env, extendEnv: true } : {}),
+    env: { ...agentEnv(), ...options.env },
+    extendEnv: false,
   });
   const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
 

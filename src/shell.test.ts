@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveBashBinary, screenCommand } from "./shell.js";
+import { agentEnv, resolveBashBinary, runCommand, screenCommand } from "./shell.js";
 
 describe("resolveBashBinary", () => {
   it("honors an explicit portable bash path", () => {
@@ -66,5 +66,34 @@ describe("screenCommand", () => {
     const res = screenCommand("rm -rf /");
     expect(res.allowed).toBe(false);
     expect(res.reason).toBeTruthy();
+  });
+});
+
+describe("agentEnv", () => {
+  it("drops secrets and keeps what tools need", () => {
+    const env = agentEnv({
+      PATH: "/usr/bin",
+      HOME: "/home/qa",
+      BASE_URL: "http://localhost:3000",
+      ANTHROPIC_API_KEY: "sk-ant",
+      JIRA_API_TOKEN: "jira",
+      AWS_ACCESS_KEY_ID: "aws",
+      GH_TOKEN: "gh",
+      DATABASE_URL: "postgres://u:p@db/app",
+    });
+    expect(env).toEqual({ PATH: "/usr/bin", HOME: "/home/qa", BASE_URL: "http://localhost:3000" });
+  });
+
+  it("is what agent shell commands actually see", async () => {
+    process.env["QA_TEST_SECRET_TOKEN"] = "leak";
+    try {
+      const result = await runCommand('printf "%s" "${QA_TEST_SECRET_TOKEN:-none}"', {
+        cwd: process.cwd(),
+        timeoutMs: 10_000,
+      });
+      expect(result.stdout).toBe("none");
+    } finally {
+      delete process.env["QA_TEST_SECRET_TOKEN"];
+    }
   });
 });
