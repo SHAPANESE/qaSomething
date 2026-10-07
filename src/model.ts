@@ -14,6 +14,13 @@ export interface Model {
 }
 
 /**
+ * The prompt carries untrusted page and command output, and `claude -p` otherwise
+ * inherits the user's tools, MCP servers and permission mode. Strip both so a
+ * prompt injection cannot act through the inner CLI and bypass screenCommand.
+ */
+export const CLAUDE_CLI_ARGS = ["-p", "--output-format", "text", "--tools", "", "--strict-mcp-config"];
+
+/**
  * Subscription-backed model: shells out to the local Claude Code CLI (`claude -p`)
  * instead of the Anthropic API, so it needs NO ANTHROPIC_API_KEY — it uses the
  * user's Claude Code subscription. `claude -p` is stateless, so we pass the whole
@@ -35,7 +42,7 @@ export function claudeCliModel(): Model {
         "\n===== CONVERSATION =====\n" + convo,
         "\n===== YOUR TURN (one action only) =====",
       ].join("\n");
-      const res = await execa("claude", ["-p", "--output-format", "text"], {
+      const res = await execa("claude", CLAUDE_CLI_ARGS, {
         input: prompt,
         reject: false,
         timeout: 300_000,
@@ -62,7 +69,7 @@ export function claudeCliTextModel(): Model {
         "\n===== CONVERSATION =====\n" + convo,
         "\n===== YOUR RESPONSE =====",
       ].join("\n");
-      const result = await execa("claude", ["-p", "--output-format", "text"], {
+      const result = await execa("claude", CLAUDE_CLI_ARGS, {
         input: prompt,
         reject: false,
         timeout: 300_000,
