@@ -26,6 +26,21 @@ describe("parseRun / serializeRun", () => {
     const raw = JSON.stringify({ date: "d", results: [{ spec: "s", outcome: "boom" }] });
     expect(() => parseRun(raw)).toThrow();
   });
+  it("accepts the manual run record qa-manual writes", () => {
+    const raw = JSON.stringify({
+      date: "2026-07-22",
+      method: "manual-playwright",
+      env: "dev",
+      results: [
+        { caseId: "TC-X-01", outcome: "blocked", evidence: "No BROKER_USER login." },
+        { caseId: "TC-X-02", outcome: "pass", evidence: "POST /api/invitations → 200" },
+      ],
+    });
+    expect(parseRun(raw).results.map((r) => r.outcome)).toEqual(["blocked", "pass"]);
+  });
+  it("rejects a result with neither spec nor caseId", () => {
+    expect(() => parseRun(JSON.stringify({ date: "d", results: [{ outcome: "pass" }] }))).toThrow();
+  });
 });
 
 describe("computeCoverage", () => {
@@ -35,17 +50,19 @@ describe("computeCoverage", () => {
       mk("TC-X-02", "failing"),
       mk("TC-X-03", "passing"),
       mk("TC-X-04", "planned"),
+      mk("TC-X-05", "blocked"),
     ];
     const cov = computeCoverage(cases);
     expect(cov).toEqual({
-      total: 4,
+      total: 5,
       planned: 1,
       authored: 0,
       passing: 2,
       failing: 1,
       flaky: 0,
       bug: 0,
-      coveredPct: 50,
+      blocked: 1,
+      coveredPct: 40,
     });
   });
   it("is zero-safe for an empty casebook", () => {

@@ -8,24 +8,32 @@ import type { CaseStatus, TestCase } from "./cases.js";
  * run updates them).
  */
 
-export const CASE_OUTCOMES = ["pass", "fail", "inconclusive"] as const;
+export const CASE_OUTCOMES = ["pass", "fail", "blocked", "inconclusive"] as const;
 export type CaseOutcome = (typeof CASE_OUTCOMES)[number];
 
+// Automated runs key a result by spec; manual runs (qa-manual) by case id plus quoted evidence.
 export const CaseRunResultSchema = z
   .object({
-    spec: z.string().min(1),
+    spec: z.string().min(1).optional(),
     caseId: z.string().optional(),
     outcome: z.enum(CASE_OUTCOMES),
+    evidence: z.string().optional(),
   })
-  .strict();
+  .strict()
+  .refine((result) => result.spec !== undefined || result.caseId !== undefined, {
+    message: "A run result needs a spec or a caseId.",
+  });
 export type CaseRunResult = z.infer<typeof CaseRunResultSchema>;
 
 export const RunRecordSchema = z
   .object({
     date: z.string().min(1),
+    /** e.g. "manual-playwright". Absent on automated runs. */
+    method: z.string().optional(),
     results: z.array(CaseRunResultSchema),
   })
-  .strict();
+  // Run-level context (env, account) is free-form; the results stay strict.
+  .loose();
 export type RunRecord = z.infer<typeof RunRecordSchema>;
 
 export function parseRun(raw: string): RunRecord {
@@ -44,6 +52,7 @@ export interface Coverage {
   failing: number;
   flaky: number;
   bug: number;
+  blocked: number;
   coveredPct: number;
 }
 
@@ -59,6 +68,7 @@ export function computeCoverage(cases: TestCase[]): Coverage {
     failing: count("failing"),
     flaky: count("flaky"),
     bug: count("bug"),
+    blocked: count("blocked"),
     coveredPct: total === 0 ? 0 : Math.round((passing / total) * 100),
   };
 }
