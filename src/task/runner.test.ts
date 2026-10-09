@@ -198,6 +198,30 @@ describe("runTask", () => {
     expect(result.mutation?.status).toBe("not_meaningful");
   });
 
+  it("does not call a task verified when its mutation fails before the oracle", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-task-mutation-"));
+    await mkdir(path.join(repoPath, "tests"));
+    const evidence = { channels: [], oracleReached: false, responses: [], console: [], pageErrors: [] };
+    const result = await runTask({
+      repoPath,
+      task: {
+        version: 1,
+        id: "create-task",
+        goal: "Create a task",
+        oracle: "One task is created.",
+        spec: "tests/create-task.spec.ts",
+        mutationSpec: "tests/create-task.mutation.spec.ts",
+        attempts: 1,
+      },
+      runner: async (spec) =>
+        spec.endsWith(".mutation.spec.ts") ? { ...outcome(false), evidence } : outcome(true),
+    });
+
+    expect(result.status).toBe("inconclusive");
+    expect(result.mutation?.status).toBe("not_meaningful");
+    expect(result.mutation?.reason).toContain("before reaching the oracle");
+  });
+
   it("reverts app-source writes made while a generated spec executes", async () => {
     const repoPath = await mkdtemp(path.join(os.tmpdir(), "qa-task-guard-"));
     await mkdir(path.join(repoPath, "tests"));

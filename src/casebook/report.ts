@@ -33,10 +33,7 @@ export function renderReport(input: ReportInput): string {
   const { ticketId, date, cases, coverage: cov, gaps, findings } = input;
   const passing = cases.filter((c) => c.status === "passing");
   const bugs = cases.filter((c) => c.status === "bug");
-  const notCovered = cases.filter(
-    (c) =>
-      c.status === "planned" || c.status === "authored" || c.status === "failing" || c.status === "flaky",
-  );
+  const notCovered = cases.filter((c) => c.status !== "passing" && c.status !== "bug");
 
   const parts: string[] = [];
   parts.push(`# QA sign-off — ${ticketId}`);
@@ -44,7 +41,7 @@ export function renderReport(input: ReportInput): string {
   parts.push(`## Coverage\n`);
   parts.push(
     `${cov.passing}/${cov.total} cases covered by trusted tests (**${cov.coveredPct}%**). ` +
-      `planned ${cov.planned} · authored ${cov.authored} · passing ${cov.passing} · failing ${cov.failing} · flaky ${cov.flaky} · bug ${cov.bug}.`,
+      `planned ${cov.planned} · authored ${cov.authored} · passing ${cov.passing} · failing ${cov.failing} · flaky ${cov.flaky} · bug ${cov.bug} · blocked ${cov.blocked}.`,
   );
   parts.push(`\n## Covered by trusted tests\n`);
   parts.push(passing.length ? passing.map(line).join("\n") : "_none yet_");

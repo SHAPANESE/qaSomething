@@ -372,12 +372,20 @@ apply after human approval; approval does not bypass them.
   that was already dirty.
 - Every semantic action has a risk category. Explicit deny wins over allow.
 - Payments, external messages, and user administration are denied by default.
-- The semantic action's code is screened too: a `read` action cannot disguise a
+- The semantic action's code is screened too: a `read` action flagged as a
   payment, an external message, user administration, or navigation to an
-  unrelated host. Assertions receive the same screening.
+  unrelated host is rejected. Assertions receive the same screening.
 - Agent shell commands may only contain local HTTP URLs. Remote Git operations,
   package installation, and recursive deletion are blocked during a run; install
   dependencies before invoking the agent.
+- Agent shell commands and generated specs run without environment variables
+  whose names look like secrets (`*KEY*`, `*TOKEN*`, `AWS_*`, `DATABASE_URL`…).
+  In `--subscription` mode the inner `claude -p` runs with no tools and no MCP
+  servers.
+- These screens are pattern-based guardrails, not a sandbox. A determined or
+  prompt-injected agent can evade them (for example, a URL built at runtime).
+  For real isolation, run the agent in a container with no secrets mounted and
+  network egress limited to the app under test.
 - Blocked or inconclusive tasks return exit code `2`; reproducible behavior
   failures return `1`; verified tasks return `0`.
 - Use test or staging environments. Do not point exploratory write tasks at

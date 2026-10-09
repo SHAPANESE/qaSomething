@@ -28,7 +28,16 @@ export const SCENARIO_CATEGORIES = [
 ] as const;
 export type ScenarioCategory = (typeof SCENARIO_CATEGORIES)[number];
 
-export const CASE_STATUSES = ["planned", "authored", "passing", "failing", "flaky", "bug"] as const;
+// `blocked`: the case could not be executed (missing account, data, or a spec answer). Not covered.
+export const CASE_STATUSES = [
+  "planned",
+  "authored",
+  "passing",
+  "failing",
+  "flaky",
+  "bug",
+  "blocked",
+] as const;
 export type CaseStatus = (typeof CASE_STATUSES)[number];
 
 export const CASE_PRIORITIES = ["high", "medium", "low"] as const;

@@ -1,6 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { RuntimeEvidence, TestRunner, TestRunResult } from "../verify.js";
+import {
+  mutationFailureProvesOracle,
+  type RuntimeEvidence,
+  type TestRunner,
+  type TestRunResult,
+} from "../verify.js";
 import { resolveTaskSpec, type QATask } from "./schema.js";
 import { classifyFinding, type FindingClassification } from "./finding.js";
 import { renderTaskReport } from "./report.js";
@@ -225,6 +230,15 @@ export async function runTask(args: {
         attempts: mutationAttempts,
         status: "not_meaningful",
         reason: "The mutated behavior still passed the original oracle.",
+      };
+      verdict = { status: "inconclusive", reason: mutation.reason };
+    } else if (!mutationRuns.every(mutationFailureProvesOracle)) {
+      mutation = {
+        spec: relativeSpec,
+        attempts: mutationAttempts,
+        status: "not_meaningful",
+        reason:
+          "The mutation spec failed before reaching the oracle, so its failure proves nothing about the assertion.",
       };
       verdict = { status: "inconclusive", reason: mutation.reason };
     } else {

@@ -1,5 +1,6 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
+import { execa } from "execa";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { initializeProject } from "./init.js";
@@ -20,6 +21,12 @@ describe("initializeProject", () => {
     expect(config.allowedWriteDirs).toContain(".qa-agent");
     expect(task.safety.deny).toContain("payment");
     expect(await readFile(result.authFile!, "utf8")).toContain("cookies");
+    await execa("git", ["init", "-q"], { cwd: repoPath });
+    const ignored = await execa("git", ["check-ignore", "-q", result.authFile!], {
+      cwd: repoPath,
+      reject: false,
+    });
+    expect(ignored.exitCode).toBe(0);
   });
 
   it("refuses to overwrite existing configuration", async () => {
