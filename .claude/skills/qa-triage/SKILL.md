@@ -25,6 +25,17 @@ bugs itself — it routes.
    `status` to `flaky`.
 5. Set this ticket's phase in `state.json` to `triaged`.
 
+## Comparing runs — count is not identity
+
+**An identical failure count is not an identical failure set.** A gate that read
+`111 passed / 35 failed` on two different dates looked like a stable known state; diffing by
+test id showed 7 failures in and 7 out. Diff failure sets **by test id**, never by count, and
+say so in the note when a spec flips between runs.
+
+A suite whose specs seed into a shared environment interferes with itself. When the same spec
+flips across runs, the honest verdict is **the suite is untrustworthy as a gate** — say that,
+instead of triaging its individual failures as if each were a finding.
+
 ## Contract (API) failures
 
 A Schemathesis contract violation (`api --json` → an operation with `outcome: fail`)
@@ -39,3 +50,13 @@ missing) is an ENV problem, not a regression — fix the setup and re-run.
 - Distinguish an ENV problem (app down, browser missing) from a real failure — don't
   file drift/regression for a broken environment.
 - Evidence, not guesses: quote the real output in the `note`.
+- **Name the most boring alternative before you classify, and kill it.** Before
+  `behavior-regression`: the test was always wrong, the fixture never seeded, a precondition
+  the spec assumes was not met, another spec in the same run wrote the row first. A
+  regression is the *interesting* answer, so it needs the boring ones ruled out, not the
+  other way round.
+- **Grade the class itself `[V]` or `[I]`, in the `note`.** `[V]` = the reruns or the
+  runner output prove this class. `[I]` = you reasoned it from a single run. The class is
+  a claim, not an observation: `behavior-regression` sends a developer to a bug, and an
+  `[I]` class spends their day. **`flaky` from one run is never `[V]`** — mixed outcomes
+  across reruns are the only evidence that word has.

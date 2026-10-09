@@ -14,6 +14,10 @@ here — that is `qa-author`.
 - **Repo under test** (`--repo <path>`), and the **ticket = the oracle** (file or
   Jira via the Atlassian MCP). No ticket → say so and ask; without a source of
   truth you would freeze current bugs as "correct".
+- **The test lens** — UI, API, Security or Full sweep. Load `docs/qa-test-lens.md`
+  and follow it. If the `qa` router already asked, reuse `state.json.lens`. If it
+  did not and the request names no surface, ask the one question and WAIT. Default
+  is UI.
 
 ## Non-negotiable process (from docs/qa-senior-criteria.md — load it and follow it)
 
@@ -27,6 +31,11 @@ here — that is `qa-author`.
    record it in gaps.md). Categories: happy, negative, boundary, state,
    concurrency, idempotency, data-integrity, interruption, security, a11y,
    performance, compatibility, i18n, contract. **Happy path is the floor, not the goal.**
+   - **The lens sets the depth, not the sweep.** Walk EVERY category under every
+     lens, but give real cases to the ones the lens owns (see the table in
+     `docs/qa-test-lens.md`) and discard the rest with a reason instead of a case.
+     Under the UI lens, every case must be reachable with the product's own
+     controls — a case that needs a crafted request is a gap, not a case.
    - **contract** = the API layer. When the ticket touches an HTTP/GraphQL API,
      the acceptance criteria ARE a contract (types, required fields, limits,
      status codes). Encode them as an OpenAPI spec — that contract is the oracle
@@ -41,7 +50,9 @@ here — that is `qa-author`.
 
 Write these files under `<repo>/.qa-agent/` (create the dir if missing):
 
-- **plan.md** — the risk ranking: what to test, what was discarded and why.
+- **plan.md** — line 1 after the title is `Lens: <ui|api|security|full> — <what
+  that leaves uncovered>`. Then the risk ranking: what to test, what was
+  discarded and why.
 - **cases.md** — one block per case, in this exact format (parsed by the
   casebook module, so match it):
 
@@ -62,7 +73,7 @@ prioritized item with only a happy case must be justified in plan.md.
 
 - **gaps.md** — one line per spec gap/ambiguity/contradiction found.
 - **state.json** — set this ticket's phase to `planned`. Write it as:
-  `{ "version": 1, "tickets": { "<TICKET>": { "ticketId": "<TICKET>", "phase": "planned", "updated": "<ISO8601>" } } }`.
+  `{ "version": 1, "tickets": { "<TICKET>": { "ticketId": "<TICKET>", "phase": "planned", "lens": "ui", "updated": "<ISO8601>" } } }`.
 
 ## Definition of done
 
@@ -70,4 +81,5 @@ prioritized item with only a happy case must be justified in plan.md.
 - cases.md covers non-happy categories (negatives/boundaries at minimum) for the
   high-risk items, each tagged with its category — the coverage is auditable.
 - gaps.md lists what the ticket leaves undefined.
-- You stated what you did NOT plan to test and why.
+- You stated what you did NOT plan to test and why — including the lenses you did
+  not run, named as uncovered scope, not as silence.

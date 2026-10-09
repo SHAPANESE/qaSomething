@@ -14,3 +14,7 @@ playwright-report/
 
 # Schemathesis cache (written to the API-under-test cwd)
 .schemathesis/
+
+# Project-specific skill notes (client names, hosts, tickets): local only
+.claude/skills/*/LOCAL.md
+*.bak

@@ -40,3 +40,12 @@ casebook. It does NOT diagnose failures (that's qa-triage) or write tests (qa-au
 - App source READ-ONLY. Only write under `.qa-agent/` (and never edit a test to make
   it pass — that's qa-triage/qa-author's call).
 - A REJECTED (hollow/flaky) spec is a failing/flaky case, not a pass.
+
+## Hard-won rules (from past runs)
+
+- **Running more than one project in a session destroys the earlier run's artifacts.**
+  Playwright clears `test-results/` on each run, so a chained gate -> narrow -> dates sequence
+  leaves only the last run's screenshots and traces. Pass a per-suite `--output=<dir>` whenever
+  you run more than one project, before the first run, not after you notice.
+- Report failure sets by test id, not just a count — `qa-triage` cannot compare runs you only
+  summarised as a number.
