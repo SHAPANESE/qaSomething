@@ -155,6 +155,19 @@ directly:
 The ticket's acceptance criteria are the oracle at every stage: a test is judged
 against what the ticket says, not against what the app happens to do.
 
+Live-browser skills that write no test code:
+
+| Skill           | Does                                                                      |
+| --------------- | ------------------------------------------------------------------------- |
+| `qa-manual`     | Executes casebook cases by hand in the browser, with evidence per verdict |
+| `qa-explore`    | One charter-bounded exploratory session with a hard action budget         |
+| `qa-adjudicate` | Decides if a candidate is real, reachable and costly before it is filed   |
+| `qa-explain`    | Walks a feature live and marks each element on screen to explain it       |
+
+Project-specific notes (hosts, domain map, reference tickets) go in a
+`LOCAL.md` next to a skill's `SKILL.md`. The skill reads it when present, and
+Git ignores it so client details never reach this repo.
+
 ## Supervised mode
 
 Exploration can run on its own while a QA stays the decision owner:
